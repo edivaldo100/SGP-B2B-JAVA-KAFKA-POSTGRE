@@ -96,6 +96,23 @@ services:
       dashboard:
         condition: service_started
 
+  # ─── K6 — execução sob demanda (docker compose run --rm k6_tester) ──────────
+  k6_tester:
+    image: grafana/k6:0.54.0
+    profiles:
+      - k6
+    volumes:
+      - ./k6:/scripts
+      - ./testes:/testes
+    environment:
+      K6_OUT: influxdb=http://influxdb:8086/k6
+      K6_SCRIPT_FILE: ${K6_SCRIPT_FILE:-/scripts/load-test.js}
+      BASE_URL: http://nginx
+    command: run ${K6_SCRIPT_FILE:-/scripts/load-test.js}
+    depends_on:
+      - influxdb
+      - nginx
+
   # ─── Observabilidade para testes de carga ────────────────────────────────────
   influxdb:
     image: influxdb:1.8-alpine

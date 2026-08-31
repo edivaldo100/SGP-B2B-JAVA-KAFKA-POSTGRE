@@ -336,16 +336,24 @@ data: {"topic":"order.events.order.approved","orderId":"550e8400...","partnerId"
 
 ## Teste de carga K6
 
-**Windows:**
+Script padrão (`k6/load-test.js`):
 
 ```bash
-$env:K6_SCRIPT_FILE='test.js'; docker compose run --rm k6_tester
+docker compose --profile k6 run --rm k6_tester
 ```
 
-**Linux / macOS:**
+Script customizado (ex: `testes/test.js`):
+
+**Windows (PowerShell):**
 
 ```bash
-K6_SCRIPT_FILE=test.js docker compose run --rm k6_tester
+$env:K6_SCRIPT_FILE='/testes/test.js'; docker compose --profile k6 run --rm k6_tester
+```
+
+**Linux / macOS / Git Bash:**
+
+```bash
+K6_SCRIPT_FILE=/testes/test.js docker compose --profile k6 run --rm k6_tester
 ```
 
 Resultados disponíveis no Grafana: http://localhost/grafana/d/ffwswyewfdse8b/k6-load-testing-results
