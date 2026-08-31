@@ -137,6 +137,44 @@ curl -X DELETE http://localhost/api/v1/partners/6
 
 `HTTP 204 No Content`
 
+**Extrato de movimentações de crédito (paginado):**
+
+```bash
+curl "http://localhost/api/v1/partners/{partnerUuid}/credit-transactions?page=0&size=20"
+```
+
+```json
+{
+  "content": [
+    {
+      "id": "b398d6c3-...",
+      "partnerId": "3fa85f64-...",
+      "orderId": "550e8400-...",
+      "type": "RELEASE",
+      "amount": 1000.00,
+      "createdAt": "2026-08-31T10:02:00"
+    },
+    {
+      "id": "94fa43f6-...",
+      "partnerId": "3fa85f64-...",
+      "orderId": "550e8400-...",
+      "type": "DEBIT",
+      "amount": 1000.00,
+      "createdAt": "2026-08-31T10:01:00"
+    }
+  ],
+  "totalElements": 2,
+  "totalPages": 1,
+  "size": 20,
+  "number": 0
+}
+```
+
+- `DEBIT` — crédito debitado ao aprovar o pedido (`PENDENTE → APROVADO`)
+- `RELEASE` — crédito estornado ao cancelar um pedido já aprovado
+
+> A fonte de verdade do saldo atual é `partner_credit.available_credit`. A tabela `credit_transaction` é auditoria imutável (append-only).
+
 ---
 
 ### Pedidos
@@ -331,7 +369,7 @@ Parceiro / Browser / K6
    Orders + Partners API (Java 21 · Spring Boot)
    ├── Hexagonal Architecture (Ports & Adapters)
    ├── Virtual Threads
-   ├── Idempotência (SHA-256 + TTL 30s)
+   ├── Idempotência (SHA-256 + TTL 30min · reclaimExpired atômico para chaves expiradas)
    ├── Pessimistic Lock (SELECT FOR UPDATE)
    ├── Outbox Pattern (SKIP LOCKED · backoff exponencial)
    ├── SSE pedidos em tempo real  (/api/v1/orders/stream)
@@ -340,6 +378,7 @@ Parceiro / Browser / K6
         ├── PostgreSQL 16
         │    orders · order_items · partners
         │    partner_credit · idempotency_keys · outbox_events
+        │    credit_transaction (auditoria append-only)
         │
         └── Apache Kafka 3.8 (KRaft)
              order.events.*
