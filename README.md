@@ -336,27 +336,37 @@ data: {"topic":"order.events.order.approved","orderId":"550e8400...","partnerId"
 
 ## Teste de carga K6
 
-Script padrão (`k6/load-test.js`):
+### Pré-requisito
+
+A aplicação deve estar no ar antes de executar o teste:
+
+```bash
+docker compose up --build -d
+```
+
+### Executar o teste
 
 ```bash
 docker compose --profile k6 run --rm k6_tester
 ```
 
-Script customizado (ex: `testes/test.js`):
+O setup cria automaticamente 5 parceiros com R$ 10.000.000 de limite cada, executa a rampa de carga (até 100 VUs por 3 minutos) e encerra.
 
-**Git Bash / MINGW (Windows)** — use `//` para evitar conversão de path:
+### Resultados no Grafana
 
-```bash
-docker compose --profile k6 run --rm k6_tester run //testes/test.js
-```
+Abra **http://localhost/grafana/** após o teste e navegue até **K6 Load Testing Results**:
 
-**PowerShell / Linux / macOS:**
+![K6 Dashboard Grafana](k6/dashboard.png)
 
-```bash
-docker compose --profile k6 run --rm k6_tester run /testes/test.js
-```
+### Dashboard em tempo real
 
-Resultados disponíveis no Grafana: http://localhost/grafana/d/ffwswyewfdse8b/k6-load-testing-results
+**Histórico de Pedidos** — atualizações via SSE durante o teste:
+
+![Histórico de Pedidos](k6/hist-pedidos.png)
+
+**Eventos Kafka** — confirmações Kafka em tempo real:
+
+![Eventos Kafka](k6/eventoskafka.png)
 
 ---
 
