@@ -2,11 +2,16 @@ package com.edivaldo.pedido.application.service;
 
 import com.edivaldo.pedido.application.command.UpdateOrderStatusCommand;
 import com.edivaldo.pedido.application.dto.OrderResponse;
+import com.edivaldo.pedido.domain.exception.InsufficientCreditException;
 import com.edivaldo.pedido.domain.exception.OrderNotFoundException;
+import com.edivaldo.pedido.domain.exception.PartnerNotFoundException;
+import com.edivaldo.pedido.domain.model.CreditTransaction;
 import com.edivaldo.pedido.domain.model.Order;
 import com.edivaldo.pedido.domain.model.OutboxEvent;
 import com.edivaldo.pedido.domain.model.OrderStatus;
+import com.edivaldo.pedido.domain.model.PartnerCredit;
 import com.edivaldo.pedido.domain.port.in.UpdateOrderStatusUseCase;
+import com.edivaldo.pedido.domain.port.out.CreditTransactionRepository;
 import com.edivaldo.pedido.domain.port.out.OrderRepository;
 import com.edivaldo.pedido.domain.port.out.OutboxEventRepository;
 import com.edivaldo.pedido.domain.port.out.PartnerCreditRepository;
@@ -22,6 +27,7 @@ public class UpdateOrderStatusService implements UpdateOrderStatusUseCase {
 
     private final OrderRepository orderRepository;
     private final PartnerCreditRepository partnerCreditRepository;
+    private final CreditTransactionRepository creditTransactionRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final OrderMapper orderMapper;
     private final ApplicationEventPublisher eventPublisher;
@@ -35,12 +41,30 @@ public class UpdateOrderStatusService implements UpdateOrderStatusUseCase {
         boolean wasDebitable = order.isCreditDebitable();
         applyTransition(order, command.newStatus());
 
-        // devolve credito se cancelado apos debitado
+        // debita crédito ao aprovar — com lock para garantir consistência
+        if (command.newStatus() == OrderStatus.APROVADO) {
+            PartnerCredit credit = partnerCreditRepository
+                    .findByPartnerIdForUpdate(order.getPartnerId())
+                    .orElseThrow(() -> new PartnerNotFoundException(order.getPartnerId()));
+            if (!credit.hasCredit(order.getTotalAmount())) {
+                throw new InsufficientCreditException(
+                        String.format("Credito insuficiente ao aprovar pedido %s: necessario %s, disponivel %s",
+                                order.getId(), order.getTotalAmount(), credit.getAvailableCredit()));
+            }
+            credit.debit(order.getTotalAmount());
+            partnerCreditRepository.save(credit);
+            creditTransactionRepository.save(
+                    CreditTransaction.debit(order.getPartnerId(), order.getId(), order.getTotalAmount()));
+        }
+
+        // estorna crédito se cancelado após ter sido debitado (aprovado ou além)
         if (command.newStatus() == OrderStatus.CANCELADO && wasDebitable) {
             partnerCreditRepository.findByPartnerIdForUpdate(order.getPartnerId())
                     .ifPresent(credit -> {
                         credit.release(order.getTotalAmount());
                         partnerCreditRepository.save(credit);
+                        creditTransactionRepository.save(
+                                CreditTransaction.release(order.getPartnerId(), order.getId(), order.getTotalAmount()));
                     });
         }
 

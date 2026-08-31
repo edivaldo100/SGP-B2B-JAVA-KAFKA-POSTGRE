@@ -84,8 +84,12 @@ public class Order {
         this.updatedAt = LocalDateTime.now();
     }
 
+    // Retorna true se o crédito já foi debitado (ocorre na transição para APROVADO).
+    // Usado para decidir se um cancelamento deve estornar crédito.
     public boolean isCreditDebitable() {
-        return status == OrderStatus.APROVADO || status == OrderStatus.EM_PROCESSAMENTO;
+        return status == OrderStatus.APROVADO
+            || status == OrderStatus.EM_PROCESSAMENTO
+            || status == OrderStatus.ENVIADO;
     }
 
     private void validateTransition(OrderStatus target) {

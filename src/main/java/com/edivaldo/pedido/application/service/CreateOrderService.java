@@ -104,8 +104,10 @@ public class CreateOrderService implements CreateOrderUseCase {
 
         Order order = Order.create(command.partnerId(), items);
 
+        // Verificação antecipada de crédito — sem lock, sem debit.
+        // O debit efetivo ocorre ao aprovar o pedido (PENDENTE → APROVADO).
         PartnerCredit credit = partnerCreditRepository
-                .findByPartnerIdForUpdate(command.partnerId())
+                .findByPartnerId(command.partnerId())
                 .orElseThrow(() -> new PartnerNotFoundException(command.partnerId()));
 
         if (!credit.hasCredit(order.getTotalAmount())) {
@@ -113,8 +115,6 @@ public class CreateOrderService implements CreateOrderUseCase {
                     String.format("Credito insuficiente para parceiro %s: necessario %s, disponivel %s",
                             command.partnerId(), order.getTotalAmount(), credit.getAvailableCredit()));
         }
-        credit.debit(order.getTotalAmount());
-        partnerCreditRepository.save(credit);
 
         Order saved = orderRepository.save(order);
 

@@ -2,10 +2,12 @@ package com.edivaldo.pedido.application.service;
 
 import com.edivaldo.pedido.application.dto.OrderResponse;
 import com.edivaldo.pedido.domain.exception.OrderNotFoundException;
+import com.edivaldo.pedido.domain.model.CreditTransaction;
 import com.edivaldo.pedido.domain.model.Order;
 import com.edivaldo.pedido.domain.model.OutboxEvent;
 import com.edivaldo.pedido.domain.model.PartnerCredit;
 import com.edivaldo.pedido.domain.port.in.CancelOrderUseCase;
+import com.edivaldo.pedido.domain.port.out.CreditTransactionRepository;
 import com.edivaldo.pedido.domain.port.out.OrderRepository;
 import com.edivaldo.pedido.domain.port.out.OutboxEventRepository;
 import com.edivaldo.pedido.domain.port.out.PartnerCreditRepository;
@@ -21,6 +23,7 @@ public class CancelOrderService implements CancelOrderUseCase {
 
     private final OrderRepository orderRepository;
     private final PartnerCreditRepository partnerCreditRepository;
+    private final CreditTransactionRepository creditTransactionRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final OrderMapper orderMapper;
 
@@ -38,6 +41,8 @@ public class CancelOrderService implements CancelOrderUseCase {
                     .ifPresent(credit -> {
                         credit.release(order.getTotalAmount());
                         partnerCreditRepository.save(credit);
+                        creditTransactionRepository.save(
+                                CreditTransaction.release(order.getPartnerId(), order.getId(), order.getTotalAmount()));
                     });
         }
 

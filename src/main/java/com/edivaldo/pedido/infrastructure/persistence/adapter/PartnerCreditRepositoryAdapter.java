@@ -17,6 +17,11 @@ public class PartnerCreditRepositoryAdapter implements PartnerCreditRepository {
     private final PartnerCreditJpaRepository jpaRepository;
 
     @Override
+    public Optional<PartnerCredit> findByPartnerId(UUID partnerId) {
+        return jpaRepository.findByPartnerId(partnerId).map(this::toDomain);
+    }
+
+    @Override
     public Optional<PartnerCredit> findByPartnerIdForUpdate(UUID partnerId) {
         return jpaRepository.findByPartnerIdForUpdate(partnerId).map(this::toDomain);
     }
