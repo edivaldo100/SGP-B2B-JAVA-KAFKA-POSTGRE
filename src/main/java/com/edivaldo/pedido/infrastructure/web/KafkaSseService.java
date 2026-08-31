@@ -65,7 +65,7 @@ public class KafkaSseService {
         try {
             String json = objectMapper.writeValueAsString(event);
             emitter.send(SseEmitter.event().name("kafka").data(json));
-        } catch (IOException e) {
+        } catch (Exception e) {
             emitters.remove(emitter);
         }
     }
