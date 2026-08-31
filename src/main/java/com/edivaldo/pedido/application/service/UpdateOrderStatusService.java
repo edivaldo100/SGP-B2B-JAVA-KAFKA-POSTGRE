@@ -10,7 +10,9 @@ import com.edivaldo.pedido.domain.port.in.UpdateOrderStatusUseCase;
 import com.edivaldo.pedido.domain.port.out.OrderRepository;
 import com.edivaldo.pedido.domain.port.out.OutboxEventRepository;
 import com.edivaldo.pedido.domain.port.out.PartnerCreditRepository;
+import com.edivaldo.pedido.infrastructure.web.OrderCreatedEvent;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +24,7 @@ public class UpdateOrderStatusService implements UpdateOrderStatusUseCase {
     private final PartnerCreditRepository partnerCreditRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final OrderMapper orderMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -49,7 +52,9 @@ public class UpdateOrderStatusService implements UpdateOrderStatusUseCase {
                 buildPayload(updated)
         ));
 
-        return orderMapper.toResponse(updated);
+        OrderResponse response = orderMapper.toResponse(updated);
+        eventPublisher.publishEvent(new OrderCreatedEvent(response));
+        return response;
     }
 
     private void applyTransition(Order order, OrderStatus target) {

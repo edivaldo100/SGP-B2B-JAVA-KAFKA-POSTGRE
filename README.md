@@ -52,6 +52,28 @@ docker-compose down --volumes --remove-orphans
 curl http://localhost/actuator/health
 ```
 
+```json
+{ "status": "UP" }
+```
+
+---
+
+### Dados de demonstração
+
+Cria 5 parceiros e ~15 pedidos com todos os status (PENDENTE, APROVADO, EM_PROCESSAMENTO, CANCELADO):
+
+```sh
+curl -X POST http://localhost/api/v1/partners-fakes
+```
+
+```json
+{
+  "message": "Dados de demonstração gerados com sucesso",
+  "parceiros_criados": 5,
+  "pedidos_criados": 15
+}
+```
+
 ---
 
 ### Parceiros
@@ -61,6 +83,17 @@ curl http://localhost/actuator/health
 curl http://localhost/api/v1/partners
 ```
 
+```json
+[
+  {
+    "id": 1,
+    "partnerUuid": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "name": "TechCorp Distribuidora",
+    "createdAt": "2026-08-31T10:00:00"
+  }
+]
+```
+
 **Cadastrar parceiro:**
 ```sh
 curl -X POST http://localhost/api/v1/partners \
@@ -68,22 +101,53 @@ curl -X POST http://localhost/api/v1/partners \
   -d '{"name": "Empresa XYZ"}'
 ```
 
+```json
+{
+  "id": 6,
+  "partnerUuid": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "name": "Empresa XYZ",
+  "createdAt": "2026-08-31T10:00:00"
+}
+```
+
 ---
 
 ### Pedidos
 
-**Criar pedido** (requer parceiro UUID e Idempotency-Key):
+**Criar pedido** (requer UUID do parceiro e Idempotency-Key único):
 ```sh
 curl -X POST http://localhost/api/v1/orders \
   -H "Content-Type: application/json" \
-  -H "X-Partner-Id: a0000000-0000-0000-0000-000000000001" \
+  -H "X-Partner-Id: {partnerUuid}" \
   -H "Idempotency-Key: pedido-001" \
   -d '{
     "items": [
-      { "productId": "PROD-A", "quantity": 2, "unitPrice": 150.00 },
-      { "productId": "PROD-B", "quantity": 1, "unitPrice": 89.90 }
+      { "productId": "NOTEBOOK-PRO", "quantity": 2, "unitPrice": 2499.90 },
+      { "productId": "MOUSE-GAMER",  "quantity": 5, "unitPrice": 149.90 }
     ]
   }'
+```
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "partnerId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "partnerSequentialId": 1,
+  "partnerName": "TechCorp Distribuidora",
+  "items": [
+    {
+      "id": "...",
+      "productId": "NOTEBOOK-PRO",
+      "quantity": 2,
+      "unitPrice": 2499.90,
+      "subtotal": 4999.80
+    }
+  ],
+  "totalAmount": 5748.30,
+  "status": "PENDENTE",
+  "createdAt": "2026-08-31T10:00:00",
+  "updatedAt": "2026-08-31T10:00:00"
+}
 ```
 
 **Listar todos os pedidos:**
@@ -98,7 +162,7 @@ curl "http://localhost/api/v1/orders?partnerId=1"
 
 **Filtrar por nome do parceiro:**
 ```sh
-curl "http://localhost/api/v1/orders?name=Parceiro%201"
+curl "http://localhost/api/v1/orders?name=TechCorp"
 ```
 
 **Filtrar por status:**
@@ -123,10 +187,21 @@ curl -X PATCH http://localhost/api/v1/orders/{orderId}/status \
   -d '{"status": "APROVADO"}'
 ```
 
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "partnerName": "TechCorp Distribuidora",
+  "totalAmount": 5748.30,
+  "status": "APROVADO",
+  "createdAt": "2026-08-31T10:00:00",
+  "updatedAt": "2026-08-31T10:01:00"
+}
+```
+
 Status válidos (máquina de estados):
 ```
 PENDENTE → APROVADO → EM_PROCESSAMENTO → ENVIADO → ENTREGUE
-* → CANCELADO (qualquer status — estorna crédito)
+* → CANCELADO  (qualquer status — estorna crédito automaticamente)
 ```
 
 **Cancelar pedido:**
@@ -134,9 +209,17 @@ PENDENTE → APROVADO → EM_PROCESSAMENTO → ENVIADO → ENTREGUE
 curl -X DELETE http://localhost/api/v1/orders/{orderId}
 ```
 
-**Stream em tempo real (SSE):**
+**Stream em tempo real (SSE) — atualiza ao criar ou mudar status:**
 ```sh
 curl -N -H "Accept: text/event-stream" http://localhost/api/v1/orders/stream
+```
+
+```
+event: order
+data: {"id":"550e8400...","partnerName":"TechCorp","status":"APROVADO","totalAmount":5748.30,...}
+
+event: order
+data: {"id":"660e9500...","partnerName":"InfoShop","status":"PENDENTE","totalAmount":1234.50,...}
 ```
 
 ---
