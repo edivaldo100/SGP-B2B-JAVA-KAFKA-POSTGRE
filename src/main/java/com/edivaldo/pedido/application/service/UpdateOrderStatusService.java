@@ -43,13 +43,11 @@ public class UpdateOrderStatusService implements UpdateOrderStatusUseCase {
 
         Order updated = orderRepository.save(order);
 
-        String eventType = resolveEventType(command.newStatus());
-        OutboxEvent event = OutboxEvent.create(
+        outboxEventRepository.save(OutboxEvent.create(
                 updated.getId(),
-                eventType,
+                resolveEventType(command.newStatus()),
                 buildPayload(updated)
-        );
-        outboxEventRepository.save(event);
+        ));
 
         return orderMapper.toResponse(updated);
     }

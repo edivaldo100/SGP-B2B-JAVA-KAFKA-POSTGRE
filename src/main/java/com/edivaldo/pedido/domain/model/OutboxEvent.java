@@ -5,6 +5,8 @@ import java.util.UUID;
 
 public class OutboxEvent {
 
+    public static final int MAX_RETRIES = 5;
+
     public enum Status { PENDING, PUBLISHED, FAILED }
 
     private UUID id;
@@ -28,6 +30,23 @@ public class OutboxEvent {
         e.retryCount = 0;
         e.createdAt = LocalDateTime.now();
         e.nextAttemptAt = e.createdAt;
+        return e;
+    }
+
+    public static OutboxEvent reconstitute(UUID id, UUID aggregateId, String eventType, String payload,
+                                           Status status, int retryCount, LocalDateTime nextAttemptAt,
+                                           String lastError, LocalDateTime createdAt, LocalDateTime publishedAt) {
+        OutboxEvent e = new OutboxEvent();
+        e.id = id;
+        e.aggregateId = aggregateId;
+        e.eventType = eventType;
+        e.payload = payload;
+        e.status = status;
+        e.retryCount = retryCount;
+        e.nextAttemptAt = nextAttemptAt;
+        e.lastError = lastError;
+        e.createdAt = createdAt;
+        e.publishedAt = publishedAt;
         return e;
     }
 

@@ -115,12 +115,11 @@ public class CreateOrderService implements CreateOrderUseCase {
 
         Order saved = orderRepository.save(order);
 
-        OutboxEvent event = OutboxEvent.create(
+        outboxEventRepository.save(OutboxEvent.create(
                 saved.getId(),
                 "ORDER_CREATED",
                 buildPayload(saved)
-        );
-        outboxEventRepository.save(event);
+        ));
 
         idempotencyRepository.markDone(idempotencyRecord.getId(), saved.getId(), 201, null);
 

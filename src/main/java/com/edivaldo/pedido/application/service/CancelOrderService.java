@@ -4,6 +4,7 @@ import com.edivaldo.pedido.application.dto.OrderResponse;
 import com.edivaldo.pedido.domain.exception.OrderNotFoundException;
 import com.edivaldo.pedido.domain.model.Order;
 import com.edivaldo.pedido.domain.model.OutboxEvent;
+import com.edivaldo.pedido.domain.model.PartnerCredit;
 import com.edivaldo.pedido.domain.port.in.CancelOrderUseCase;
 import com.edivaldo.pedido.domain.port.out.OrderRepository;
 import com.edivaldo.pedido.domain.port.out.OutboxEventRepository;
@@ -42,13 +43,12 @@ public class CancelOrderService implements CancelOrderUseCase {
 
         Order cancelled = orderRepository.save(order);
 
-        OutboxEvent event = OutboxEvent.create(
+        outboxEventRepository.save(OutboxEvent.create(
                 cancelled.getId(),
                 "ORDER_CANCELLED",
                 String.format("{\"orderId\":\"%s\",\"partnerId\":\"%s\",\"status\":\"CANCELADO\"}",
                         cancelled.getId(), cancelled.getPartnerId())
-        );
-        outboxEventRepository.save(event);
+        ));
 
         return orderMapper.toResponse(cancelled);
     }

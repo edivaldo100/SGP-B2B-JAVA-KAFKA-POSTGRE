@@ -32,6 +32,26 @@ public class IdempotencyRecord {
         return r;
     }
 
+    public static IdempotencyRecord reconstitute(UUID id, UUID partnerId, String idempotencyKey,
+                                                  String requestHash, Status status, UUID orderId,
+                                                  Integer responseStatus, String responseBody,
+                                                  LocalDateTime createdAt, LocalDateTime completedAt,
+                                                  LocalDateTime expiresAt) {
+        IdempotencyRecord r = new IdempotencyRecord();
+        r.id = id;
+        r.partnerId = partnerId;
+        r.idempotencyKey = idempotencyKey;
+        r.requestHash = requestHash;
+        r.status = status;
+        r.orderId = orderId;
+        r.responseStatus = responseStatus;
+        r.responseBody = responseBody;
+        r.createdAt = createdAt;
+        r.completedAt = completedAt;
+        r.expiresAt = expiresAt;
+        return r;
+    }
+
     private IdempotencyRecord() {}
 
     public boolean isHashMismatch(String incomingHash) {
