@@ -14,8 +14,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -36,33 +38,27 @@ public class FindOrderService implements FindOrderUseCase {
     @Override
     @Transactional(readOnly = true)
     public List<OrderResponse> findAll() {
-        return orderRepository.findByCreatedAtBetween(
-                LocalDateTime.now().minusYears(10), LocalDateTime.now().plusDays(1)
-        ).stream().map(orderMapper::toResponse).toList();
+        List<Order> orders = orderRepository.findByCreatedAtBetween(
+                LocalDateTime.now().minusYears(10), LocalDateTime.now().plusDays(1));
+        return mapWithPartners(orders);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<OrderResponse> findByPartnerId(UUID partnerId) {
-        return orderRepository.findByPartnerId(partnerId).stream()
-                .map(orderMapper::toResponse)
-                .toList();
+        return mapWithPartners(orderRepository.findByPartnerId(partnerId));
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<OrderResponse> findByStatus(OrderStatus status) {
-        return orderRepository.findByStatus(status).stream()
-                .map(orderMapper::toResponse)
-                .toList();
+        return mapWithPartners(orderRepository.findByStatus(status));
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<OrderResponse> findByPeriod(LocalDateTime start, LocalDateTime end) {
-        return orderRepository.findByCreatedAtBetween(start, end).stream()
-                .map(orderMapper::toResponse)
-                .toList();
+        return mapWithPartners(orderRepository.findByCreatedAtBetween(start, end));
     }
 
     @Override
@@ -82,7 +78,15 @@ public class FindOrderService implements FindOrderUseCase {
                     LocalDateTime.now().minusYears(10), LocalDateTime.now().plusDays(1));
         }
 
-        return orders.stream().map(orderMapper::toResponse).toList();
+        return mapWithPartners(orders);
+    }
+
+    private List<OrderResponse> mapWithPartners(List<Order> orders) {
+        Map<UUID, Partner> partnerMap = partnerRepository.findAll().stream()
+                .collect(Collectors.toMap(Partner::getPartnerUuid, p -> p));
+        return orders.stream()
+                .map(o -> orderMapper.toResponse(o, partnerMap))
+                .toList();
     }
 
     private Optional<UUID> resolvePartnerUuid(Integer partnerSequentialId, String partnerName) {

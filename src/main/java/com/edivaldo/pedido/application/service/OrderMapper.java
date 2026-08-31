@@ -9,7 +9,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @Component
 @RequiredArgsConstructor
@@ -19,7 +21,14 @@ public class OrderMapper {
 
     public OrderResponse toResponse(Order order) {
         Optional<Partner> partner = partnerRepository.findByPartnerUuid(order.getPartnerId());
+        return toResponse(order, partner.orElse(null));
+    }
 
+    public OrderResponse toResponse(Order order, Map<UUID, Partner> partnerMap) {
+        return toResponse(order, partnerMap.get(order.getPartnerId()));
+    }
+
+    private OrderResponse toResponse(Order order, Partner partner) {
         List<OrderResponse.OrderItemResponse> items = order.getItems().stream()
                 .map(this::toItemResponse)
                 .toList();
@@ -27,8 +36,8 @@ public class OrderMapper {
         return new OrderResponse(
                 order.getId(),
                 order.getPartnerId(),
-                partner.map(Partner::getId).orElse(null),
-                partner.map(Partner::getName).orElse(null),
+                partner != null ? partner.getId() : null,
+                partner != null ? partner.getName() : null,
                 items,
                 order.getTotalAmount(),
                 order.getStatus(),
