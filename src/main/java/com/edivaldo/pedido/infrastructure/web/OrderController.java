@@ -38,6 +38,7 @@ public class OrderController {
     private final CancelOrderUseCase cancelOrderUseCase;
     private final FindOrderUseCase findOrderUseCase;
     private final OrderSseService orderSseService;
+    private final KafkaSseService kafkaSseService;
 
     @PostMapping
     @Operation(summary = "Cria um novo pedido")
@@ -83,6 +84,12 @@ public class OrderController {
     @Operation(summary = "Stream SSE de novos pedidos em tempo real")
     public SseEmitter stream() {
         return orderSseService.subscribe();
+    }
+
+    @GetMapping(value = "/kafka/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @Operation(summary = "Stream SSE dos eventos consumidos do Kafka (últimos 20)")
+    public SseEmitter kafkaStream() {
+        return kafkaSseService.subscribe();
     }
 
     @GetMapping

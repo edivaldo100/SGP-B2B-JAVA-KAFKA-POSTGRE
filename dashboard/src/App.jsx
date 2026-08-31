@@ -23,7 +23,7 @@ export default function App() {
           className={`tab ${activeTab === 'events' ? 'active' : ''}`}
           onClick={() => setActiveTab('events')}
         >
-          Eventos SSE
+          Eventos Kafka
         </button>
         <button
           className={`tab ${activeTab === 'grafana' ? 'active' : ''}`}
