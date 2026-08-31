@@ -39,18 +39,9 @@ export const options = {
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:80';
 
-// Parceiros pré-cadastrados (devem existir na tabela partner_credit)
-const PARTNERS = [
-  'a0000000-0000-0000-0000-000000000001',
-  'a0000000-0000-0000-0000-000000000002',
-  'a0000000-0000-0000-0000-000000000003',
-  'a0000000-0000-0000-0000-000000000004',
-  'a0000000-0000-0000-0000-000000000005',
-];
-
 const PRODUCTS = ['PROD-001', 'PROD-002', 'PROD-003', 'PROD-004', 'PROD-005'];
 
-// ─── Setup: dados iniciais ────────────────────────────────────────────────────
+// ─── Setup: cria parceiros e retorna UUIDs reais ──────────────────────────────
 export function setup() {
   console.log(`Iniciando teste contra: ${BASE_URL}`);
   const health = http.get(`${BASE_URL}/actuator/health`);
@@ -58,11 +49,31 @@ export function setup() {
     throw new Error(`Aplicacao nao esta saudavel: ${health.status}`);
   }
   console.log('Health check OK');
+
+  const partners = [];
+  for (let i = 1; i <= 5; i++) {
+    const res = http.post(
+      `${BASE_URL}/api/v1/partners`,
+      JSON.stringify({ name: `K6 Partner ${i}`, creditLimit: 10000000 }),
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+    if (res.status === 201) {
+      partners.push(res.json().partnerUuid);
+    } else {
+      console.warn(`Falha ao criar parceiro ${i}: ${res.status} ${res.body}`);
+    }
+  }
+
+  if (partners.length === 0) {
+    throw new Error('Nenhum parceiro criado — abortando teste');
+  }
+  console.log(`Parceiros criados: ${partners.length}`);
+  return { partners };
 }
 
 // ─── Cenário principal ────────────────────────────────────────────────────────
-export default function () {
-  const partnerId = PARTNERS[Math.floor(Math.random() * PARTNERS.length)];
+export default function (data) {
+  const partnerId = data.partners[Math.floor(Math.random() * data.partners.length)];
   const idempotencyKey = uuidv4();
 
   const payload = buildPayload();
