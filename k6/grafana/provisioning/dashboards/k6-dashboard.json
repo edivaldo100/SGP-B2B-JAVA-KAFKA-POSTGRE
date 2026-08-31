@@ -1,0 +1,282 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "annotations": { "list": [] },
+  "description": "K6 Load Testing Results",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "title": "Overview",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 80 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "id": 2,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "title": "Virtual Users",
+      "type": "stat",
+      "targets": [
+        {
+          "alias": "Virtual Users",
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "groupBy": [{ "params": ["$__interval"], "type": "time" }, { "params": ["null"], "type": "fill" }],
+          "measurement": "vus",
+          "orderByTime": "ASC",
+          "policy": "default",
+          "refId": "A",
+          "resultFormat": "time_series",
+          "select": [[{ "params": ["value"], "type": "field" }, { "params": [], "type": "last" }]],
+          "tags": []
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 500 },
+              { "color": "red", "value": 1000 }
+            ]
+          },
+          "unit": "ms"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "id": 3,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["mean"], "fields": "", "values": false }, "textMode": "auto" },
+      "title": "Avg Response Time",
+      "type": "stat",
+      "targets": [
+        {
+          "alias": "Avg Response Time",
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "groupBy": [{ "params": ["$__interval"], "type": "time" }, { "params": ["null"], "type": "fill" }],
+          "measurement": "http_req_duration",
+          "orderByTime": "ASC",
+          "policy": "default",
+          "refId": "A",
+          "resultFormat": "time_series",
+          "select": [[{ "params": ["value"], "type": "field" }, { "params": [], "type": "mean" }]],
+          "tags": []
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "id": 4,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false }, "textMode": "auto" },
+      "title": "Requests Failed",
+      "type": "stat",
+      "targets": [
+        {
+          "alias": "Failed",
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "groupBy": [{ "params": ["$__interval"], "type": "time" }, { "params": ["null"], "type": "fill" }],
+          "measurement": "http_req_failed",
+          "orderByTime": "ASC",
+          "policy": "default",
+          "refId": "A",
+          "resultFormat": "time_series",
+          "select": [[{ "params": ["value"], "type": "field" }, { "params": [], "type": "sum" }]],
+          "tags": [{ "key": "expected_response", "operator": "=", "value": "false" }]
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "id": 5,
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false }, "textMode": "auto" },
+      "title": "Total Requests",
+      "type": "stat",
+      "targets": [
+        {
+          "alias": "Total",
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "groupBy": [],
+          "measurement": "http_reqs",
+          "orderByTime": "ASC",
+          "policy": "default",
+          "refId": "A",
+          "resultFormat": "time_series",
+          "select": [[{ "params": ["value"], "type": "field" }, { "params": [], "type": "sum" }]],
+          "tags": []
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 15, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": false, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } },
+          "unit": "ms"
+        }
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 5 },
+      "id": 6,
+      "options": { "legend": { "calcs": ["mean", "max", "min"], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "title": "Response Time",
+      "type": "timeseries",
+      "targets": [
+        {
+          "alias": "p95",
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "groupBy": [{ "params": ["$__interval"], "type": "time" }, { "params": ["null"], "type": "fill" }],
+          "measurement": "http_req_duration",
+          "orderByTime": "ASC",
+          "policy": "default",
+          "refId": "A",
+          "resultFormat": "time_series",
+          "select": [[{ "params": ["value"], "type": "field" }, { "params": ["95"], "type": "percentile" }]],
+          "tags": []
+        },
+        {
+          "alias": "median",
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "groupBy": [{ "params": ["$__interval"], "type": "time" }, { "params": ["null"], "type": "fill" }],
+          "measurement": "http_req_duration",
+          "orderByTime": "ASC",
+          "policy": "default",
+          "refId": "B",
+          "resultFormat": "time_series",
+          "select": [[{ "params": ["value"], "type": "field" }, { "params": ["50"], "type": "percentile" }]],
+          "tags": []
+        },
+        {
+          "alias": "avg",
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "groupBy": [{ "params": ["$__interval"], "type": "time" }, { "params": ["null"], "type": "fill" }],
+          "measurement": "http_req_duration",
+          "orderByTime": "ASC",
+          "policy": "default",
+          "refId": "C",
+          "resultFormat": "time_series",
+          "select": [[{ "params": ["value"], "type": "field" }, { "params": [], "type": "mean" }]],
+          "tags": []
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 15, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": false, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "id": 7,
+      "options": { "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "title": "Virtual Users",
+      "type": "timeseries",
+      "targets": [
+        {
+          "alias": "VUs",
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "groupBy": [{ "params": ["$__interval"], "type": "time" }, { "params": ["null"], "type": "fill" }],
+          "measurement": "vus",
+          "orderByTime": "ASC",
+          "policy": "default",
+          "refId": "A",
+          "resultFormat": "time_series",
+          "select": [[{ "params": ["value"], "type": "field" }, { "params": [], "type": "last" }]],
+          "tags": []
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 15, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": false, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } },
+          "unit": "reqps"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "id": 8,
+      "options": { "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "title": "Request Rate",
+      "type": "timeseries",
+      "targets": [
+        {
+          "alias": "req/s",
+          "datasource": { "type": "influxdb", "uid": "influxdb" },
+          "groupBy": [{ "params": ["$__interval"], "type": "time" }, { "params": ["null"], "type": "fill" }],
+          "measurement": "http_reqs",
+          "orderByTime": "ASC",
+          "policy": "default",
+          "refId": "A",
+          "resultFormat": "time_series",
+          "select": [[{ "params": ["value"], "type": "field" }, { "params": [], "type": "count" }]],
+          "tags": []
+        }
+      ]
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "tags": ["k6", "load-testing"],
+  "templating": { "list": [] },
+  "time": { "from": "now-5m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "K6 Load Testing Results",
+  "uid": "ffwswyewfdse8b",
+  "version": 1,
+  "weekStart": ""
+}
