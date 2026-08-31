@@ -14,7 +14,7 @@ public class KafkaOrderEventListener {
 
     private final KafkaSseService kafkaSseService;
 
-    @KafkaListener(topicPattern = "order\\.events\\..*", groupId = "order-service-sse")
+    @KafkaListener(topicPattern = "order\\.events\\..*", groupId = "order-service-sse", containerFactory = "sseKafkaListenerContainerFactory")
     public void onOrderEvent(
             String payload,
             @Header("kafka_receivedTopic") String topic
