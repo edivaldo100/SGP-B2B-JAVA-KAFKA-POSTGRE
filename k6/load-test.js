@@ -57,10 +57,10 @@ export function setup() {
       JSON.stringify({ name: `K6 Partner ${i}`, creditLimit: 10000000 }),
       { headers: { 'Content-Type': 'application/json' } }
     );
-    if (res.status === 201) {
+    if (res.status === 201 || res.status === 200) {
       partners.push(res.json().partnerUuid);
     } else {
-      console.warn(`Falha ao criar parceiro ${i}: ${res.status} ${res.body}`);
+      console.warn(`Falha ao criar parceiro ${i}: status=${res.status} body=${res.body}`);
     }
   }
 
