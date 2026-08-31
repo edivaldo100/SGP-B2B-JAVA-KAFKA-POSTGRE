@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Component
@@ -31,17 +32,14 @@ public class OutboxPublisher {
         log.debug("Processando {} eventos do outbox", events.size());
 
         for (OutboxEvent event : events) {
+            String topic = TOPIC_PREFIX + event.getEventType().toLowerCase().replace("_", ".");
             try {
-                String topic = TOPIC_PREFIX + event.getEventType().toLowerCase().replace("_", ".");
+                // Envio síncrono: bloqueia até Kafka confirmar (ou timeout 5s)
+                // markPublished roda na mesma transação — sem chance de re-publicar
                 kafkaTemplate.send(topic, event.getAggregateId().toString(), event.getPayload())
-                        .whenComplete((result, ex) -> {
-                            if (ex != null) {
-                                handleFailure(event, ex);
-                            } else {
-                                outboxEventRepository.markPublished(event.getId());
-                                log.debug("Evento publicado: {} -> {}", event.getId(), topic);
-                            }
-                        });
+                        .get(5, TimeUnit.SECONDS);
+                outboxEventRepository.markPublished(event.getId());
+                log.debug("Evento publicado: {} -> {}", event.getId(), topic);
             } catch (Exception e) {
                 handleFailure(event, e);
             }
@@ -54,7 +52,7 @@ public class OutboxPublisher {
         outboxEventRepository.markFailed(event.getId(), ex.getMessage(), nextRetry);
 
         if (nextRetry >= OutboxEvent.MAX_RETRIES) {
-            log.error("Evento {} excedeu {} tentativas e foi marcado como FAILED. Intervencao manual necessaria.",
+            log.error("Evento {} excedeu {} tentativas e foi marcado como FAILED.",
                     event.getId(), OutboxEvent.MAX_RETRIES);
         }
     }
