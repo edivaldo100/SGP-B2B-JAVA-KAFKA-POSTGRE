@@ -72,7 +72,19 @@ public class CreateOrderService implements CreateOrderUseCase {
                 throw new DuplicateOperationException(
                         "Pedido ainda esta sendo processado: " + command.idempotencyKey());
             }
-            // expirado — pode reprocessar, deleta o registro antigo antes
+
+            // expirado — reclaima atomicamente; se outro processo ganhou a corrida, 409
+            IdempotencyRecord reclaimed = IdempotencyRecord.createProcessing(
+                    command.partnerId(),
+                    command.idempotencyKey(),
+                    command.requestHash(),
+                    IDEMPOTENCY_TTL_MINUTES
+            );
+            if (!idempotencyRepository.reclaimExpired(reclaimed)) {
+                throw new DuplicateOperationException(
+                        "Pedido concorrente detectado: " + command.idempotencyKey());
+            }
+            return reclaimed;
         }
 
         IdempotencyRecord newRecord = IdempotencyRecord.createProcessing(

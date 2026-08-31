@@ -37,6 +37,18 @@ public class IdempotencyRepositoryAdapter implements IdempotencyRepository {
     }
 
     @Override
+    public boolean reclaimExpired(IdempotencyRecord newRecord) {
+        int rows = jpaRepository.reclaimExpired(
+                newRecord.getId(),
+                newRecord.getRequestHash(),
+                newRecord.getCreatedAt(),
+                newRecord.getExpiresAt(),
+                newRecord.getPartnerId(),
+                newRecord.getIdempotencyKey());
+        return rows == 1;
+    }
+
+    @Override
     public void markDone(UUID id, UUID orderId, int responseStatus, String responseBody) {
         jpaRepository.markDone(id, orderId, responseStatus, responseBody, LocalDateTime.now());
     }
