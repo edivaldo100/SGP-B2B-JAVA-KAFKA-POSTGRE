@@ -2,9 +2,7 @@ package com.edivaldo.pedido.infrastructure.persistence.jpa;
 
 import com.edivaldo.pedido.domain.model.OutboxEvent;
 import com.edivaldo.pedido.infrastructure.persistence.entity.OutboxEventJpaEntity;
-import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
@@ -14,7 +12,6 @@ import java.util.UUID;
 
 public interface OutboxEventJpaRepository extends JpaRepository<OutboxEventJpaEntity, UUID> {
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(value = """
         SELECT * FROM outbox_events
         WHERE status = 'PENDING' AND next_attempt_at <= NOW()

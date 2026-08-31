@@ -55,6 +55,11 @@
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-core</artifactId>
         </dependency>
+        <!-- Suporte a PostgreSQL no Flyway 10+ (movido para módulo separado) -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
 
         <!-- ═══════════════════════════════════════════════
              MESSAGING
