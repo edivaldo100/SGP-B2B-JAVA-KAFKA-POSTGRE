@@ -324,7 +324,19 @@ Parceiro / Browser / K6
              └── OutboxPublisher → KafkaConfirmedEvent → KafkaSseService → Browser
 ```
 
-Diagramas PlantUML em [`docs/`](docs/):
+### Visão geral do sistema
+
+![SGP-B2B Overview](docs/SGP-B2B%20Overview.svg)
+
+### Arquitetura hexagonal
+
+![SGP-B2B Architecture](docs/SGP-B2B%20Architecture.svg)
+
+### Fluxos de integração e SSE
+
+![SGP-B2B API Integration](docs/SGP-B2B%20API%20Integration.svg)
+
+Fontes PlantUML em [`docs/`](docs/):
 
 | Arquivo | Conteúdo |
 |---|---|
