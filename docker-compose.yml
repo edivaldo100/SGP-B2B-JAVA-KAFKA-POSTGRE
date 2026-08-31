@@ -73,6 +73,14 @@ services:
       retries: 10
       start_period: 60s
 
+  # ─── Dashboard (frontend React) ──────────────────────────────────────────
+  dashboard:
+    build:
+      context: ./dashboard/frontend
+      dockerfile: Dockerfile
+    container_name: orders-dashboard
+    restart: unless-stopped
+
   # ─── API Gateway (Nginx) ─────────────────────────────────────────────────
   nginx:
     image: nginx:1.27-alpine
@@ -85,6 +93,8 @@ services:
     depends_on:
       app:
         condition: service_healthy
+      dashboard:
+        condition: service_started
 
   # ─── Observabilidade para testes de carga ────────────────────────────────────
   influxdb:
@@ -109,6 +119,8 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
       GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_SERVER_ROOT_URL: "http://localhost/grafana/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./k6/grafana/provisioning:/etc/grafana/provisioning

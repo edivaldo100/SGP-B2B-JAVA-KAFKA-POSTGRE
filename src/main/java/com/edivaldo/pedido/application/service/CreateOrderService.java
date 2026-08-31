@@ -15,7 +15,9 @@ import com.edivaldo.pedido.domain.port.out.IdempotencyRepository;
 import com.edivaldo.pedido.domain.port.out.OrderRepository;
 import com.edivaldo.pedido.domain.port.out.OutboxEventRepository;
 import com.edivaldo.pedido.domain.port.out.PartnerCreditRepository;
+import com.edivaldo.pedido.infrastructure.web.OrderCreatedEvent;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -34,6 +36,7 @@ public class CreateOrderService implements CreateOrderUseCase {
     private final OutboxEventRepository outboxEventRepository;
     private final OrderMapper orderMapper;
     private final TransactionTemplate transactionTemplate;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     public OrderResponse execute(CreateOrderCommand command) {
@@ -123,7 +126,9 @@ public class CreateOrderService implements CreateOrderUseCase {
 
         idempotencyRepository.markDone(idempotencyRecord.getId(), saved.getId(), 201, null);
 
-        return orderMapper.toResponse(saved);
+        OrderResponse response = orderMapper.toResponse(saved);
+        eventPublisher.publishEvent(new OrderCreatedEvent(response));
+        return response;
     }
 
     private String buildPayload(Order order) {

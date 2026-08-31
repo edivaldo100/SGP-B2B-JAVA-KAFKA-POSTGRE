@@ -15,8 +15,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -35,6 +37,7 @@ public class OrderController {
     private final UpdateOrderStatusUseCase updateOrderStatusUseCase;
     private final CancelOrderUseCase cancelOrderUseCase;
     private final FindOrderUseCase findOrderUseCase;
+    private final OrderSseService orderSseService;
 
     @PostMapping
     @Operation(summary = "Cria um novo pedido")
@@ -76,24 +79,20 @@ public class OrderController {
         return ResponseEntity.ok(findOrderUseCase.findById(orderId));
     }
 
+    @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @Operation(summary = "Stream SSE de novos pedidos em tempo real")
+    public SseEmitter stream() {
+        return orderSseService.subscribe();
+    }
+
     @GetMapping
-    @Operation(summary = "Lista pedidos por parceiro ou status")
-    public ResponseEntity<List<OrderResponse>> findAll(
-            @RequestParam(required = false) UUID partnerId,
+    @Operation(summary = "Lista pedidos com filtros opcionais: partnerId (sequencial), name, status")
+    public ResponseEntity<List<OrderResponse>> search(
+            @RequestParam(required = false) Integer partnerId,
+            @RequestParam(required = false) String name,
             @RequestParam(required = false) OrderStatus status) {
 
-        if (partnerId != null && status != null) {
-            return ResponseEntity.ok(findOrderUseCase.findByPartnerId(partnerId).stream()
-                    .filter(o -> o.status() == status)
-                    .toList());
-        }
-        if (partnerId != null) {
-            return ResponseEntity.ok(findOrderUseCase.findByPartnerId(partnerId));
-        }
-        if (status != null) {
-            return ResponseEntity.ok(findOrderUseCase.findByStatus(status));
-        }
-        return ResponseEntity.badRequest().build();
+        return ResponseEntity.ok(findOrderUseCase.search(partnerId, name, status));
     }
 
     private static String sha256(String input) {

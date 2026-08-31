@@ -2,15 +2,19 @@ package com.edivaldo.pedido.application.service;
 
 import com.edivaldo.pedido.application.dto.OrderResponse;
 import com.edivaldo.pedido.domain.exception.OrderNotFoundException;
+import com.edivaldo.pedido.domain.model.Order;
 import com.edivaldo.pedido.domain.model.OrderStatus;
+import com.edivaldo.pedido.domain.model.Partner;
 import com.edivaldo.pedido.domain.port.in.FindOrderUseCase;
 import com.edivaldo.pedido.domain.port.out.OrderRepository;
+import com.edivaldo.pedido.domain.port.out.PartnerRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -18,6 +22,7 @@ import java.util.UUID;
 public class FindOrderService implements FindOrderUseCase {
 
     private final OrderRepository orderRepository;
+    private final PartnerRepository partnerRepository;
     private final OrderMapper orderMapper;
 
     @Override
@@ -26,6 +31,14 @@ public class FindOrderService implements FindOrderUseCase {
         return orderRepository.findById(id)
                 .map(orderMapper::toResponse)
                 .orElseThrow(() -> new OrderNotFoundException(id));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<OrderResponse> findAll() {
+        return orderRepository.findByCreatedAtBetween(
+                LocalDateTime.now().minusYears(10), LocalDateTime.now().plusDays(1)
+        ).stream().map(orderMapper::toResponse).toList();
     }
 
     @Override
@@ -50,5 +63,35 @@ public class FindOrderService implements FindOrderUseCase {
         return orderRepository.findByCreatedAtBetween(start, end).stream()
                 .map(orderMapper::toResponse)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<OrderResponse> search(Integer partnerSequentialId, String partnerName, OrderStatus status) {
+        Optional<UUID> partnerUuid = resolvePartnerUuid(partnerSequentialId, partnerName);
+
+        List<Order> orders;
+        if (partnerUuid.isPresent() && status != null) {
+            orders = orderRepository.findByPartnerIdAndStatus(partnerUuid.get(), status);
+        } else if (partnerUuid.isPresent()) {
+            orders = orderRepository.findByPartnerId(partnerUuid.get());
+        } else if (status != null) {
+            orders = orderRepository.findByStatus(status);
+        } else {
+            orders = orderRepository.findByCreatedAtBetween(
+                    LocalDateTime.now().minusYears(10), LocalDateTime.now().plusDays(1));
+        }
+
+        return orders.stream().map(orderMapper::toResponse).toList();
+    }
+
+    private Optional<UUID> resolvePartnerUuid(Integer partnerSequentialId, String partnerName) {
+        if (partnerSequentialId != null) {
+            return partnerRepository.findById(partnerSequentialId).map(Partner::getPartnerUuid);
+        }
+        if (partnerName != null && !partnerName.isBlank()) {
+            return partnerRepository.findByName(partnerName).map(Partner::getPartnerUuid);
+        }
+        return Optional.empty();
     }
 }

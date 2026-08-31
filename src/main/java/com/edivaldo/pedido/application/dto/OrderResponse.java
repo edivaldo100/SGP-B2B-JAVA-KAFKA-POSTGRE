@@ -10,6 +10,8 @@ import java.util.UUID;
 public record OrderResponse(
     UUID id,
     UUID partnerId,
+    Integer partnerSequentialId,
+    String partnerName,
     List<OrderItemResponse> items,
     BigDecimal totalAmount,
     OrderStatus status,

@@ -11,9 +11,13 @@ public interface FindOrderUseCase {
 
     OrderResponse findById(UUID id);
 
+    List<OrderResponse> findAll();
+
     List<OrderResponse> findByPartnerId(UUID partnerId);
 
     List<OrderResponse> findByStatus(OrderStatus status);
 
     List<OrderResponse> findByPeriod(LocalDateTime start, LocalDateTime end);
+
+    List<OrderResponse> search(Integer partnerSequentialId, String partnerName, OrderStatus status);
 }
