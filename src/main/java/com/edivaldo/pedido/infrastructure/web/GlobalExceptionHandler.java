@@ -7,6 +7,7 @@ import com.edivaldo.pedido.domain.exception.OrderNotFoundException;
 import com.edivaldo.pedido.domain.exception.PartnerNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -40,6 +41,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DuplicateOperationException.class)
     public ProblemDetail handleDuplicate(DuplicateOperationException ex) {
         return problem(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ProblemDetail handleNotReadable(HttpMessageNotReadableException ex) {
+        String msg = ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage();
+        return problem(HttpStatus.BAD_REQUEST, "Requisição inválida: " + msg);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

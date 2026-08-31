@@ -52,6 +52,11 @@ public class PartnerRepositoryAdapter implements PartnerRepository {
         return jpaRepository.existsByName(name);
     }
 
+    @Override
+    public void deleteById(Integer id) {
+        jpaRepository.deleteById(id);
+    }
+
     private Partner toDomain(PartnerJpaEntity e) {
         return Partner.reconstitute(e.getId(), e.getPartnerUuid(), e.getName(), e.getCreatedAt());
     }

@@ -19,4 +19,6 @@ public interface PartnerRepository {
     List<Partner> findAll();
 
     boolean existsByName(String name);
+
+    void deleteById(Integer id);
 }

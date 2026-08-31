@@ -24,12 +24,20 @@ public class PartnerController {
     @PostMapping
     @Operation(summary = "Cadastra um novo parceiro")
     public ResponseEntity<PartnerResponse> create(@Valid @RequestBody CreatePartnerRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(partnerService.create(request.name()));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(partnerService.create(request.name(), request.creditLimit()));
     }
 
     @GetMapping
     @Operation(summary = "Lista todos os parceiros")
     public ResponseEntity<List<PartnerResponse>> findAll() {
         return ResponseEntity.ok(partnerService.findAll());
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Remove um parceiro")
+    public ResponseEntity<Void> delete(@PathVariable Integer id) {
+        partnerService.delete(id);
+        return ResponseEntity.noContent().build();
     }
 }

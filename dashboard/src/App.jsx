@@ -2,9 +2,17 @@ import { useState } from 'react'
 import OrdersTab from './components/OrdersTab'
 import GrafanaTab from './components/GrafanaTab'
 import EventsTab from './components/EventsTab'
+import ManagementTab from './components/ManagementTab'
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('orders')
+
+  const tabs = [
+    { key: 'orders', label: 'Histórico de Pedidos' },
+    { key: 'events', label: 'Eventos Kafka' },
+    { key: 'management', label: 'Gerenciamento' },
+    { key: 'grafana', label: 'Métricas (Grafana)' },
+  ]
 
   return (
     <div className="app">
@@ -13,28 +21,20 @@ export default function App() {
         <span className="badge live">● LIVE</span>
       </div>
       <div className="tabs">
-        <button
-          className={`tab ${activeTab === 'orders' ? 'active' : ''}`}
-          onClick={() => setActiveTab('orders')}
-        >
-          Histórico de Pedidos
-        </button>
-        <button
-          className={`tab ${activeTab === 'events' ? 'active' : ''}`}
-          onClick={() => setActiveTab('events')}
-        >
-          Eventos Kafka
-        </button>
-        <button
-          className={`tab ${activeTab === 'grafana' ? 'active' : ''}`}
-          onClick={() => setActiveTab('grafana')}
-        >
-          Métricas (Grafana)
-        </button>
+        {tabs.map(t => (
+          <button
+            key={t.key}
+            className={`tab ${activeTab === t.key ? 'active' : ''}`}
+            onClick={() => setActiveTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
       <div className="content">
         {activeTab === 'orders' && <OrdersTab />}
         {activeTab === 'events' && <EventsTab />}
+        {activeTab === 'management' && <ManagementTab />}
         {activeTab === 'grafana' && <GrafanaTab />}
       </div>
     </div>
