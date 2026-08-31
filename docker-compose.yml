@@ -106,9 +106,8 @@ services:
       - ./testes:/testes
     environment:
       K6_OUT: influxdb=http://influxdb:8086/k6
-      K6_SCRIPT_FILE: ${K6_SCRIPT_FILE:-/scripts/load-test.js}
       BASE_URL: http://nginx
-    command: run ${K6_SCRIPT_FILE:-/scripts/load-test.js}
+    command: ["run", "/scripts/load-test.js"]
     depends_on:
       - influxdb
       - nginx

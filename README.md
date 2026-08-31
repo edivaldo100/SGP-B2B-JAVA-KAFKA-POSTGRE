@@ -344,16 +344,16 @@ docker compose --profile k6 run --rm k6_tester
 
 Script customizado (ex: `testes/test.js`):
 
-**Windows (PowerShell):**
+**Git Bash / MINGW (Windows)** — use `//` para evitar conversão de path:
 
 ```bash
-$env:K6_SCRIPT_FILE='/testes/test.js'; docker compose --profile k6 run --rm k6_tester
+docker compose --profile k6 run --rm k6_tester run //testes/test.js
 ```
 
-**Linux / macOS / Git Bash:**
+**PowerShell / Linux / macOS:**
 
 ```bash
-K6_SCRIPT_FILE=/testes/test.js docker compose --profile k6 run --rm k6_tester
+docker compose --profile k6 run --rm k6_tester run /testes/test.js
 ```
 
 Resultados disponíveis no Grafana: http://localhost/grafana/d/ffwswyewfdse8b/k6-load-testing-results
