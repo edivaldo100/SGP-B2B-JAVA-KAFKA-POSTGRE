@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import OrdersTab from './components/OrdersTab'
 import GrafanaTab from './components/GrafanaTab'
+import EventsTab from './components/EventsTab'
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('orders')
@@ -19,6 +20,12 @@ export default function App() {
           Histórico de Pedidos
         </button>
         <button
+          className={`tab ${activeTab === 'events' ? 'active' : ''}`}
+          onClick={() => setActiveTab('events')}
+        >
+          Eventos SSE
+        </button>
+        <button
           className={`tab ${activeTab === 'grafana' ? 'active' : ''}`}
           onClick={() => setActiveTab('grafana')}
         >
@@ -27,6 +34,7 @@ export default function App() {
       </div>
       <div className="content">
         {activeTab === 'orders' && <OrdersTab />}
+        {activeTab === 'events' && <EventsTab />}
         {activeTab === 'grafana' && <GrafanaTab />}
       </div>
     </div>
