@@ -2,8 +2,8 @@
 
 !theme plain
 skinparam linetype ortho
-skinparam nodesep 40
-skinparam ranksep 60
+skinparam nodesep 35
+skinparam ranksep 55
 skinparam defaultFontName Arial
 skinparam defaultFontSize 11
 skinparam backgroundColor #FAFAFA
@@ -17,47 +17,40 @@ skinparam package {
   FontSize         12
   BorderThickness  2
 }
-
 skinparam component {
   BorderColor      #4a6fa5
   BackgroundColor  #dce8ff
   FontColor        #1a1a2e
   FontSize         10
 }
-
 skinparam interface {
   BorderColor      #e07b39
   BackgroundColor  #fff3eb
   FontColor        #1a1a2e
   FontSize         10
 }
-
 skinparam database {
   BorderColor      #2e7d32
   BackgroundColor  #e8f5e9
   FontColor        #1a1a2e
   FontSize         10
 }
-
 skinparam queue {
   BorderColor      #c04000
   BackgroundColor  #fff0e6
   FontColor        #1a1a2e
   FontSize         10
 }
-
 skinparam actor {
   BorderColor      #6a0080
   BackgroundColor  #f3e5f5
   FontColor        #1a1a2e
 }
-
 skinparam arrow {
   Color            #4a6fa5
   FontSize         9
   FontColor        #333333
 }
-
 skinparam note {
   BorderColor      #9e9e9e
   BackgroundColor  #f5f5f5
@@ -66,29 +59,43 @@ skinparam note {
 }
 
 ' ═══════════════════════════════════════════════════════
-'  DIREÇÃO: esquerda → direita
-' ═══════════════════════════════════════════════════════
-left to right direction
-
-' ═══════════════════════════════════════════════════════
 '  ATORES
 ' ═══════════════════════════════════════════════════════
-actor "Parceiro\n/ Cliente" as CLIENT
-actor "K6\nLoad Test" as K6
+actor "Parceiro / Cliente" as CLIENT
+actor "K6 Load Test"       as K6
+actor "Browser Dashboard"  as BROWSER
+
+' ═══════════════════════════════════════════════════════
+'  EDGE
+' ═══════════════════════════════════════════════════════
+package "Edge · Nginx :80" as PKG_EDGE {
+  component "API Gateway\nRouting · Proxy Reverso\nSSE sem buffer" as GW
+}
 
 ' ═══════════════════════════════════════════════════════
 '  ADAPTER IN — Web
 ' ═══════════════════════════════════════════════════════
 package "Adapter IN · Web" as PKG_WEB {
   component "OrderController" as CTRL
-  note bottom of CTRL
+  note right of CTRL
     POST   /api/v1/orders
     PATCH  /api/v1/orders/{id}/status
+    DELETE /api/v1/orders/{id}
     GET    /api/v1/orders/{id}
+    GET    /api/v1/orders  (filtros opcionais)
+    GET    /api/v1/orders/stream  (SSE)
     ──────────────────────────────
     Headers: X-Partner-Id · Idempotency-Key
     Erros: RFC 9457 ProblemDetail
   end note
+
+  component "PartnerController" as PCTRL
+  note right of PCTRL
+    POST /api/v1/partners
+    GET  /api/v1/partners
+  end note
+
+  component "OrderSseService\nSseEmitter pool\n@EventListener" as SSE
 }
 
 ' ═══════════════════════════════════════════════════════
@@ -97,21 +104,18 @@ package "Adapter IN · Web" as PKG_WEB {
 package "Application · Use Cases" as PKG_APP {
 
   component "CreateOrderService" as SVC_CREATE
-  note bottom of SVC_CREATE
-    TX1 (TransactionTemplate)
-    └─ INSERT idempotency_keys PROCESSING
-    └─ ON CONFLICT → checa hash / expiração
-    ──────────────────────────────
-    TX2 (TransactionTemplate)
-    └─ SELECT FOR UPDATE partner_credit
+  note right of SVC_CREATE
+    TX1: INSERT idempotency PROCESSING
+    TX2: SELECT FOR UPDATE partner_credit
     └─ Debita crédito
     └─ Salva Order (PENDENTE)
-    └─ Salva OutboxEvent (PENDING)
+    └─ Salva OutboxEvent
     └─ markDone idempotency
+    └─ publishEvent(OrderCreatedEvent)
   end note
 
   component "UpdateOrderStatusService" as SVC_UPDATE
-  note bottom of SVC_UPDATE
+  note right of SVC_UPDATE
     Máquina de estados:
     PENDENTE → APROVADO
     APROVADO → EM_PROCESSAMENTO
@@ -119,43 +123,51 @@ package "Application · Use Cases" as PKG_APP {
     ENVIADO → ENTREGUE
     * → CANCELADO (libera crédito)
   end note
+
+  component "FindOrderService\n(N+1 evitado: 1 query\npara todos os partners)" as SVC_FIND
+
+  component "PartnerService" as SVC_PARTNER
+  note right of SVC_PARTNER
+    create(): valida unicidade de nome
+    └─ salva Partner + PartnerCredit
+       (limite R$100M por padrão)
+    findAll()
+  end note
 }
 
 ' ═══════════════════════════════════════════════════════
 '  DOMÍNIO
 ' ═══════════════════════════════════════════════════════
 package "Domain · Model" as PKG_DOM {
-
-  component "Order\n(Aggregate Root)\n\ncreate() · reconstitute()\napprove() · startProcessing()\nship() · deliver() · cancel()\nisCreditDebitable()" as ORDER
-
-  component "OrderItem\n\nsubtotal()\nvalidação: qtd > 0\npreço ≥ 0" as ITEM
-
-  component "PartnerCredit\n\nhasCredit(value)\ndebit(value)\nrelease(value)\n[@Version — Optimistic Lock]" as CREDIT
-
-  component "IdempotencyRecord\n\ncreateProcessing()\nisHashMismatch()\nisExpired() · isDone()\nTTL: expires_at +30s" as IDEM
-
-  component "OutboxEvent\n\nMAX_RETRIES = 5\nBackoff: 30s × 2^n\n(30→60→120→240→480s)\nStatus: PENDING|SENT|FAILED" as OUTBOX
+  component "Order (Aggregate Root)\ncreate() · reconstitute()\napprove() · cancel()" as ORDER
+  component "OrderItem\nsubtotal()" as ITEM
+  component "Partner\nid (SERIAL) · partnerUuid\ncreate() · reconstitute()" as PARTNER
+  component "PartnerCredit\nhasCredit() · debit() · release()\n[@Version — Optimistic Lock]" as CREDIT
+  component "IdempotencyRecord\ncreateProcessing() · isDone()\nTTL 30s" as IDEM
+  component "OutboxEvent\nMAX_RETRIES=5\nBackoff 30s×2ⁿ" as OUTBOX
 
   ORDER "1" *-down- "N" ITEM : contém
 }
 
 ' ═══════════════════════════════════════════════════════
-'  PORTS (interfaces)
+'  PORTS
 ' ═══════════════════════════════════════════════════════
 package "Ports · Out" as PKG_PORTS {
-  interface "OrderRepository" as P_ORDER
+  interface "OrderRepository"         as P_ORDER
+  interface "PartnerRepository"       as P_PARTNER
   interface "PartnerCreditRepository" as P_CREDIT
-  interface "IdempotencyRepository" as P_IDEM
-  interface "OutboxEventRepository" as P_OUTBOX
+  interface "IdempotencyRepository"   as P_IDEM
+  interface "OutboxEventRepository"   as P_OUTBOX
 }
 
 ' ═══════════════════════════════════════════════════════
 '  ADAPTERS OUT — Persistence
 ' ═══════════════════════════════════════════════════════
-package "Adapter OUT · Persistence (JPA / Flyway 10)" as PKG_JPA {
-  component "OrderRepositoryAdapter" as A_ORDER
-  component "PartnerCreditRepositoryAdapter\n@Version preservado no save()" as A_CREDIT
-  component "IdempotencyRepositoryAdapter\nDataIntegrityViolation → false" as A_IDEM
+package "Adapter OUT · JPA / Flyway 10" as PKG_JPA {
+  component "OrderRepositoryAdapter"         as A_ORDER
+  component "PartnerRepositoryAdapter"       as A_PARTNER
+  component "PartnerCreditRepositoryAdapter" as A_CREDIT
+  component "IdempotencyRepositoryAdapter"   as A_IDEM
   component "OutboxEventRepositoryAdapter\nFOR UPDATE SKIP LOCKED" as A_OUTBOX
 }
 
@@ -163,77 +175,74 @@ package "Adapter OUT · Persistence (JPA / Flyway 10)" as PKG_JPA {
 '  ADAPTER OUT — Messaging
 ' ═══════════════════════════════════════════════════════
 package "Adapter OUT · Messaging" as PKG_MSG {
-  component "OutboxPublisher\n@Scheduled fixedDelay=1s\nbatch=50\nkafkaTemplate.send().whenComplete()" as PUBLISHER
+  component "OutboxPublisher\n@Scheduled fixedDelay=1s\nbatch=50" as PUBLISHER
 }
 
 ' ═══════════════════════════════════════════════════════
-'  INFRAESTRUTURA EXTERNA
+'  INFRA EXTERNA
 ' ═══════════════════════════════════════════════════════
-database "PostgreSQL 16\n:5432\n\norders · order_items\npartner_credit\nidempotency_keys\noutbox_events\n\nÍndices parciais:\nWHERE status='PENDING'\nWHERE status='PROCESSING'" as PG
+database "PostgreSQL 16 :5432\norders · order_items\npartners · partner_credit\nidempotency_keys · outbox_events" as PG
 
-queue "Apache Kafka 3.8\n:9092 (KRaft)\n\nTopics:\norder.events.{tipo}" as KAFKA
+queue "Apache Kafka 3.8 :9092\n(KRaft)\norder.events.*" as KAFKA
 
-' ═══════════════════════════════════════════════════════
-'  OBSERVABILIDADE
-' ═══════════════════════════════════════════════════════
 package "Observabilidade" as PKG_OBS {
-  database "InfluxDB 1.8\n:8086 · db=k6" as INFLUX
-  component "Grafana 10.4\n:3000\nDashboard ID 2587" as GRAFANA
-}
-
-' ═══════════════════════════════════════════════════════
-'  RUNTIME CONFIG
-' ═══════════════════════════════════════════════════════
-package "Runtime Config" as PKG_CFG {
-  component "Java 21\nVirtual Threads\nspring.threads.virtual=true" as VT
-  component "TransactionConfig\nTransactionTemplate bean\n(2 TXs em CreateOrderService)" as TXCFG
+  database "InfluxDB 1.8 :8086" as INFLUX
+  component "Grafana 10.4\n/grafana/" as GRAFANA
 }
 
 ' ═══════════════════════════════════════════════════════
 '  RELACIONAMENTOS
 ' ═══════════════════════════════════════════════════════
+CLIENT  --> GW : HTTP :80
+K6      --> GW : HTTP :80
+BROWSER --> GW : HTTP :80
 
-' Entrada
-CLIENT --> CTRL           : HTTP
-K6     --> CTRL           : carga
+GW --> CTRL  : /api/v1/orders
+GW --> PCTRL : /api/v1/partners
 
-' Web → App
-CTRL --> SVC_CREATE       : CreateOrderCommand
-CTRL --> SVC_UPDATE       : UpdateOrderStatusCommand
+CTRL  --> SVC_CREATE  : CreateOrderCommand
+CTRL  --> SVC_UPDATE  : UpdateOrderStatusCommand
+CTRL  --> SVC_FIND    : search / findById
+CTRL  --> SSE         : subscribe()
+PCTRL --> SVC_PARTNER : create / findAll
 
-' App → Domain
-SVC_CREATE --> ORDER      : Order.create()
-SVC_CREATE --> IDEM       : createProcessing / markDone
-SVC_CREATE --> CREDIT     : debit
-SVC_UPDATE --> ORDER      : approve / ship / cancel ...
-SVC_UPDATE --> CREDIT     : release
+SVC_CREATE  --> ORDER   : Order.create()
+SVC_CREATE  --> IDEM    : createProcessing
+SVC_CREATE  --> CREDIT  : debit
+SVC_CREATE  --> SSE     : publishEvent
 
-' App → Ports
-SVC_CREATE --> P_ORDER    : save
-SVC_CREATE --> P_CREDIT   : findByPartnerId (lock)
-SVC_CREATE --> P_IDEM     : tryInsert / markDone
-SVC_CREATE --> P_OUTBOX   : save
-SVC_UPDATE --> P_ORDER    : findById / save
-SVC_UPDATE --> P_CREDIT   : save
+SVC_UPDATE  --> ORDER   : approve / cancel
+SVC_UPDATE  --> CREDIT  : release
 
-' Ports → Adapters
-P_ORDER  ..|> A_ORDER
-P_CREDIT ..|> A_CREDIT
-P_IDEM   ..|> A_IDEM
-P_OUTBOX ..|> A_OUTBOX
+SVC_FIND    --> P_ORDER   : search
+SVC_FIND    --> P_PARTNER : findAll (1 query)
 
-' Adapters → BD
-A_ORDER  --> PG
-A_CREDIT --> PG
-A_IDEM   --> PG
-A_OUTBOX --> PG
+SVC_PARTNER --> P_PARTNER : save
+SVC_PARTNER --> P_CREDIT  : save
 
-' Outbox Relay
-PUBLISHER --> A_OUTBOX    : findPendingForUpdate\nmarkSent / markFailed
-PUBLISHER --> KAFKA       : send(event)
+SVC_CREATE --> P_ORDER  : save
+SVC_CREATE --> P_CREDIT : findForUpdate
+SVC_CREATE --> P_IDEM   : tryInsert / markDone
+SVC_CREATE --> P_OUTBOX : save
+SVC_UPDATE --> P_ORDER  : findById / save
+SVC_UPDATE --> P_CREDIT : save
 
-' Observabilidade
-K6      --> INFLUX        : --out influxdb
-INFLUX  --> GRAFANA       : datasource
+P_ORDER   ..|> A_ORDER
+P_PARTNER ..|> A_PARTNER
+P_CREDIT  ..|> A_CREDIT
+P_IDEM    ..|> A_IDEM
+P_OUTBOX  ..|> A_OUTBOX
+
+A_ORDER   --> PG
+A_PARTNER --> PG
+A_CREDIT  --> PG
+A_IDEM    --> PG
+A_OUTBOX  --> PG
+
+PUBLISHER --> A_OUTBOX : findPendingForUpdate\nmarkSent / markFailed
+PUBLISHER --> KAFKA    : send(event)
+
+K6     --> INFLUX  : --out influxdb
+INFLUX --> GRAFANA : datasource
 
 @enduml

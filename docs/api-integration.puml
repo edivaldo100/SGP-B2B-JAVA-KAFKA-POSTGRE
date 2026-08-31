@@ -58,13 +58,13 @@ skinparam divider {
 ' ════════════════════════════════════
 '  PARTICIPANTES
 ' ════════════════════════════════════
-actor        "Parceiro B2B"       as PARTNER
-participant  "API Gateway"        as GW      #c5cae9
-participant  "Orders API\n:8080"  as ORDERS  #bbdefb
-database     "PostgreSQL\n:5432"  as PG      #c8e6c9
-queue        "Kafka\n:9092"       as KAFKA   #ffe0b2
-collections  "Notif. API\n:8082"  as NOTIFY  #e1bee7
-collections  "Parceiros API\n:8081" as PAPI  #e1bee7
+actor        "Parceiro B2B"          as PARTNER
+actor        "Browser Dashboard"     as BROWSER
+participant  "Nginx :80"             as GW      #c5cae9
+participant  "Orders+Partners API"   as ORDERS  #bbdefb
+database     "PostgreSQL :5432"      as PG      #c8e6c9
+queue        "Kafka :9092"           as KAFKA   #ffe0b2
+collections  "Notif. API (futuro)"   as NOTIFY  #e1bee7
 
 ' ════════════════════════════════════
 '  FLUXO 1 — CRIAR PEDIDO
@@ -169,14 +169,29 @@ end note
 NOTIFY --> KAFKA : commit offset
 deactivate NOTIFY
 
-KAFKA -> PAPI : order.events.order_created
-activate PAPI
-note right of PAPI
-  Atualiza dashboard do parceiro
-  Registra histórico de pedidos
+' ════════════════════════════════════
+'  FLUXO SSE — DASHBOARD TEMPO REAL
+' ════════════════════════════════════
+== Fluxo SSE · Dashboard Tempo Real ==
+
+BROWSER -> GW : GET /api/v1/orders/stream\nAccept: text/event-stream
+activate GW
+GW -> ORDERS : proxy HTTP/1.1\n(sem buffer)
+activate ORDERS
+note right of ORDERS
+  SseEmitter registrado no pool
+  (OrderSseService)
 end note
-PAPI --> KAFKA : commit offset
-deactivate PAPI
+ORDERS --> GW : 200 text/event-stream\n(conexão mantida aberta)
+GW --> BROWSER : stream aberto
+
+... pedido novo chegou ...
+
+ORDERS -> BROWSER : event: order\ndata: { id, parceiro, status, total }
+note right of BROWSER
+  Linha aparece em verde
+  na tabela em tempo real
+end note
 
 ' ════════════════════════════════════
 '  FLUXO 4 — ATUALIZAR STATUS

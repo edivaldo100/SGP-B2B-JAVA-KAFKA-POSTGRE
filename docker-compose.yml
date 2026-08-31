@@ -76,7 +76,7 @@ services:
   # ─── Dashboard (frontend React) ──────────────────────────────────────────
   dashboard:
     build:
-      context: ./dashboard/frontend
+      context: ./dashboard
       dockerfile: Dockerfile
     container_name: orders-dashboard
     restart: unless-stopped

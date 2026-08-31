@@ -1,41 +1,38 @@
-@startuml
+@startuml SGP-B2B Overview
 skinparam componentStyle rectangle
 skinparam defaultFontName Arial
 skinparam defaultFontSize 11
 skinparam linetype ortho
 skinparam backgroundColor #FFFFFF
+skinparam nodesep 30
+skinparam ranksep 50
 
 skinparam actor {
   BorderColor     #4527a0
   BackgroundColor #ede7f6
   FontColor       #1a1a2e
 }
-
 skinparam node {
   BorderColor     #37474f
   BackgroundColor #eceff1
   FontColor       #1a1a2e
   FontStyle       bold
 }
-
 skinparam component {
   BorderColor     #1565c0
   BackgroundColor #e3f2fd
   FontColor       #1a1a2e
 }
-
 skinparam queue {
   BorderColor     #e65100
   BackgroundColor #fff3e0
   FontColor       #1a1a2e
 }
-
 skinparam database {
   BorderColor     #2e7d32
   BackgroundColor #e8f5e9
   FontColor       #1a1a2e
 }
-
 skinparam arrow {
   Color           #455a64
   FontColor       #455a64
@@ -44,64 +41,68 @@ skinparam arrow {
 
 actor "Parceiro B2B" as partner
 actor "K6 Load Test"  as k6
+actor "Browser\n(Dashboard)" as browser
 
 node "SGP-B2B (Docker Compose)" #f5f5f5 {
 
-  node "Edge  :80 (único ponto de entrada)" as edge #e8eaf6 {
+  node "Edge :80 (único ponto de entrada)" as edge #e8eaf6 {
     [API Gateway · Nginx] #c5cae9
   }
 
-  node "Orders API  (interno · app:8080)" as app #e3f2fd {
-    [OrderController]          #bbdefb
-    [CreateOrderService]       #bbdefb
-    [UpdateOrderStatusService] #bbdefb
-    [OutboxPublisher]          #bbdefb
+  node "Orders API (app:8080)" as app #e3f2fd {
+    [OrderController\nPartnerController] #bbdefb
+    [CreateOrderService]                #bbdefb
+    [PartnerService]                    #bbdefb
+    [OutboxPublisher]                   #bbdefb
+    [OrderSseService · SSE]             #bbdefb
+  }
+
+  node "Dashboard (dashboard:80)" as dash #e8f5e9 {
+    [React + Vite\n/dashboard/] #c8e6c9
   }
 
   node "Mensageria" as msg #fff3e0 {
-    queue [Apache Kafka  :9092] #ffccbc
+    queue [Apache Kafka :9092] #ffccbc
   }
 
-  node "Consumidores" as consumers #f3e5f5 {
-    [Notificações API] #e1bee7
-    [Parceiros API]    #e1bee7
-  }
-
-  database "PostgreSQL  :5432" as pg #e8f5e9 {
+  database "PostgreSQL :5432" as pg #e8f5e9 {
     [orders]           #c8e6c9
+    [partners]         #c8e6c9
     [partner_credit]   #c8e6c9
     [idempotency_keys] #c8e6c9
     [outbox_events]    #c8e6c9
   }
 
   node "Observabilidade" as obs #fff8e1 {
-    [Grafana  :3000]  #ffe082
-    [InfluxDB  :8086] #fff9c4
+    [Grafana /grafana/] #ffe082
+    [InfluxDB :8086]    #fff9c4
   }
 
 }
 
 partner --> [API Gateway · Nginx]          : HTTP :80
-k6      --> [API Gateway · Nginx]          : HTTP :80\n(load test)
+k6      --> [API Gateway · Nginx]          : HTTP :80 (load test)
+browser --> [API Gateway · Nginx]          : HTTP :80
 
-[API Gateway · Nginx]      --> [OrderController] : proxy\n/api/ · /swagger-ui/\n/actuator/
+[API Gateway · Nginx]  --> [OrderController\nPartnerController] : /api/
+[API Gateway · Nginx]  --> [React + Vite\n/dashboard/]          : /dashboard/
+[API Gateway · Nginx]  --> [Grafana /grafana/]                   : /grafana/
 
-[OrderController]          --> [CreateOrderService]
-[OrderController]          --> [UpdateOrderStatusService]
-[CreateOrderService]       --> [orders]
-[CreateOrderService]       --> [partner_credit]
-[CreateOrderService]       --> [idempotency_keys]
-[CreateOrderService]       --> [outbox_events]
-[UpdateOrderStatusService] --> [orders]
-[UpdateOrderStatusService] --> [partner_credit]
+[OrderController\nPartnerController]  --> [CreateOrderService]
+[OrderController\nPartnerController]  --> [PartnerService]
+[CreateOrderService]  --> [orders]
+[CreateOrderService]  --> [partner_credit]
+[CreateOrderService]  --> [idempotency_keys]
+[CreateOrderService]  --> [outbox_events]
+[CreateOrderService]  --> [OrderSseService · SSE]   : SSE broadcast
+[PartnerService]      --> [partners]
 
-[OutboxPublisher]          --> [outbox_events]       : FOR UPDATE SKIP LOCKED
-[OutboxPublisher]          --> [Apache Kafka  :9092] : at-least-once
+[OutboxPublisher]     --> [outbox_events]       : FOR UPDATE SKIP LOCKED
+[OutboxPublisher]     --> [Apache Kafka :9092]  : at-least-once
 
-[Apache Kafka  :9092]      --> [Notificações API]
-[Apache Kafka  :9092]      --> [Parceiros API]
+k6             --> [InfluxDB :8086]   : --out influxdb
+[InfluxDB :8086] --> [Grafana /grafana/] : datasource
 
-k6                         --> [InfluxDB  :8086]  : --out influxdb
-[InfluxDB  :8086]          --> [Grafana  :3000]   : datasource
+browser        --> [OrderSseService · SSE] : EventSource /api/v1/orders/stream
 
 @enduml
