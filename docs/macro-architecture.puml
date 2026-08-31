@@ -1,0 +1,139 @@
+@startuml SGP-B2B Macro Architecture
+
+!theme plain
+left to right direction
+skinparam linetype ortho
+skinparam nodesep 30
+skinparam ranksep 80
+skinparam defaultFontName Arial
+skinparam defaultFontSize 10
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontColor #1a1a2e
+skinparam roundCorner 10
+
+skinparam rectangle {
+  BorderThickness 2
+  FontSize        10
+}
+skinparam package {
+  BorderThickness 2
+  FontStyle       bold
+  FontSize        11
+}
+skinparam database {
+  BorderColor     #2e7d32
+  BackgroundColor #e8f5e9
+  FontColor       #1a1a2e
+  FontSize        10
+}
+skinparam queue {
+  BorderColor     #e65100
+  BackgroundColor #fff3e0
+  FontColor       #1a1a2e
+  FontSize        10
+}
+skinparam arrow {
+  Color           #455a64
+  FontSize        9
+  FontColor       #455a64
+}
+
+' ════════════════════════════════════════════════════════════
+'  COLUNA 1 — Clientes
+' ════════════════════════════════════════════════════════════
+package "Clientes B2B" as C1 #f9fbe7 {
+  rectangle "Parceiro A\n(ERP / Sistema)" as PA #dcedc8
+  rectangle "Parceiro B\n(E-commerce)"   as PB #dcedc8
+  rectangle "Parceiro C\n(Mobile App)"   as PC #dcedc8
+  rectangle "K6\nLoad Test"              as K6 #fff9c4
+}
+
+' ════════════════════════════════════════════════════════════
+'  COLUNA 2 — Edge
+' ════════════════════════════════════════════════════════════
+package "Edge" as C2 #e8eaf6 {
+  rectangle "API Gateway\n──────────\nRate Limiting\nAuth / TLS\nRouting" as GW #c5cae9
+}
+
+' ════════════════════════════════════════════════════════════
+'  COLUNA 3 — Microserviços
+' ════════════════════════════════════════════════════════════
+package "Microserviços" as C3 #e3f2fd {
+  rectangle "**Orders API**\n──────────\nJava 21 · Spring Boot 3.3\nVirtual Threads\nArquitetura Hexagonal\n:8080" as API_ORDERS   #bbdefb
+  rectangle "Parceiros API\n──────────\nCadastro de parceiros\n(futuro · :8081)"               as API_PARTNERS #e3f2fd
+  rectangle "Notificações API\n──────────\nE-mail · Push · Webhook\n(futuro · :8082)"          as API_NOTIFY   #e3f2fd
+}
+
+' ════════════════════════════════════════════════════════════
+'  COLUNA 4 — Mensageria
+' ════════════════════════════════════════════════════════════
+package "Mensageria" as C4 #fff3e0 {
+  queue "Apache Kafka 3.8\n(KRaft)\n:9092\n──────────\norder.events.criado\norder.events.aprovado\norder.events.cancelado" as KAFKA
+}
+
+' ════════════════════════════════════════════════════════════
+'  COLUNA 5 — Persistência
+' ════════════════════════════════════════════════════════════
+package "Persistência" as C5 #e8f5e9 {
+  database "PostgreSQL 16\n:5432\n──────────\norders\norder_items\npartner_credit\nidempotency_keys\noutbox_events" as PG
+  database "InfluxDB 1.8\n:8086 · db=k6\n──────────\nmétricas K6" as INFLUX
+}
+
+' ════════════════════════════════════════════════════════════
+'  COLUNA 6 — Observabilidade
+' ════════════════════════════════════════════════════════════
+package "Observabilidade" as C6 #f3e5f5 {
+  rectangle "Grafana 10.4\n:3000\n──────────\nDashboard K6 #2587\nMétricas · Alertas" as GRAFANA  #e1bee7
+  rectangle "Spring Actuator\n──────────\n/health\n/metrics\n/info"                   as ACTUATOR #e1bee7
+}
+
+' ════════════════════════════════════════════════════════════
+'  PADRÕES INTERNOS (Orders API)
+' ════════════════════════════════════════════════════════════
+package "Padrões · Orders API" as C7 #fafafa {
+  together {
+    rectangle "Hexagonal\nPorts & Adapters" as PAT1 #f5f5f5
+    rectangle "Idempotência\nKey + SHA-256\nTTL 30s"  as PAT2 #f5f5f5
+    rectangle "Outbox\nSKIP LOCKED\nBackoff 30s×2ⁿ" as PAT3 #f5f5f5
+    rectangle "Pessimistic Lock\nSELECT FOR UPDATE\npartner_credit" as PAT4 #f5f5f5
+  }
+}
+
+' ════════════════════════════════════════════════════════════
+'  SETAS
+' ════════════════════════════════════════════════════════════
+
+' Clientes → Gateway
+PA --> GW : HTTPS
+PB --> GW : HTTPS
+PC --> GW : HTTPS
+K6 --> GW : HTTP\n(load test)
+
+' Gateway → Serviços
+GW --> API_ORDERS   : /api/v1/orders
+GW --> API_PARTNERS : /api/v1/partners
+GW --> API_NOTIFY   : (interno)
+
+' Serviços → Kafka
+API_ORDERS --> KAFKA : Outbox Relay\nat-least-once
+
+' Kafka → Consumidores
+KAFKA --> API_NOTIFY   : order.events.*
+KAFKA --> API_PARTNERS : order.events.*
+
+' Serviços → BD
+API_ORDERS   --> PG : JPA + Flyway
+API_PARTNERS --> PG : (futuro)
+
+' Obs
+K6       --> INFLUX   : --out influxdb
+INFLUX   --> GRAFANA  : datasource
+API_ORDERS --> ACTUATOR : expõe
+
+' Padrões
+API_ORDERS .. PAT1
+API_ORDERS .. PAT2
+API_ORDERS .. PAT3
+API_ORDERS .. PAT4
+
+@enduml

@@ -1,0 +1,250 @@
+@startuml SGP-B2B API Integration
+
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam defaultFontColor #1a1a2e
+skinparam roundCorner 8
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+skinparam participant {
+  BorderColor     #1565c0
+  BackgroundColor #e3f2fd
+  FontColor       #1a1a2e
+  FontSize        10
+  FontStyle       bold
+}
+
+skinparam actor {
+  BorderColor     #4527a0
+  BackgroundColor #ede7f6
+  FontColor       #1a1a2e
+}
+
+skinparam database {
+  BorderColor     #2e7d32
+  BackgroundColor #e8f5e9
+  FontColor       #1a1a2e
+}
+
+skinparam queue {
+  BorderColor     #e65100
+  BackgroundColor #fff3e0
+  FontColor       #1a1a2e
+}
+
+skinparam collections {
+  BorderColor     #6a1b9a
+  BackgroundColor #f3e5f5
+  FontColor       #1a1a2e
+}
+
+skinparam note {
+  BorderColor     #9e9e9e
+  BackgroundColor #fafafa
+  FontColor       #444444
+  FontSize        9
+}
+
+skinparam divider {
+  BorderColor     #90a4ae
+  FontColor       #37474f
+  FontSize        11
+  FontStyle       bold
+}
+
+' ════════════════════════════════════
+'  PARTICIPANTES
+' ════════════════════════════════════
+actor        "Parceiro B2B"       as PARTNER
+participant  "API Gateway"        as GW      #c5cae9
+participant  "Orders API\n:8080"  as ORDERS  #bbdefb
+database     "PostgreSQL\n:5432"  as PG      #c8e6c9
+queue        "Kafka\n:9092"       as KAFKA   #ffe0b2
+collections  "Notif. API\n:8082"  as NOTIFY  #e1bee7
+collections  "Parceiros API\n:8081" as PAPI  #e1bee7
+
+' ════════════════════════════════════
+'  FLUXO 1 — CRIAR PEDIDO
+' ════════════════════════════════════
+== Fluxo 1 · Criar Pedido ==
+
+PARTNER -> GW : POST /api/v1/orders\nHeaders: X-Partner-Id · Idempotency-Key\nBody: { items: [...] }
+activate GW
+
+GW -> ORDERS : roteia requisição
+activate ORDERS
+
+note right of ORDERS
+  SHA-256(body) = requestHash
+end note
+
+' TX1 — Idempotência
+group TX1 · Idempotência (TransactionTemplate)
+  ORDERS -> PG : INSERT idempotency_keys\nstatus=PROCESSING · expires_at=now+30s\nON CONFLICT DO NOTHING
+  activate PG
+  PG --> ORDERS : inserted=true (ganhou a corrida)\nou inserted=false (duplicata)
+  deactivate PG
+
+  alt Chave duplicada — mesmo hash
+    ORDERS --> GW  : 201 (resposta cacheada)
+    GW      --> PARTNER : 201 OK (idempotente)
+    note right of ORDERS : Retorna resultado\ndo pedido original
+  else Chave duplicada — hash diferente
+    ORDERS --> GW  : 422 Unprocessable Entity
+    GW      --> PARTNER : 422 (payload alterado\npara mesma chave)
+  end
+end
+
+' TX2 — Negócio
+group TX2 · Lógica de Negócio (TransactionTemplate)
+  ORDERS -> PG : SELECT * FROM partner_credit\nWHERE partner_id = ?\nFOR UPDATE
+  activate PG
+  PG --> ORDERS : saldo disponível
+  deactivate PG
+
+  alt Crédito insuficiente
+    ORDERS -> PG : UPDATE idempotency_keys\nstatus=DONE · response_status=422
+    ORDERS --> GW : 422 Crédito insuficiente
+    GW --> PARTNER : 422 Insufficient Credit
+  else Crédito aprovado
+    ORDERS -> PG : UPDATE partner_credit\navailable_credit -= total
+    ORDERS -> PG : INSERT orders + order_items\nstatus=PENDENTE
+    ORDERS -> PG : INSERT outbox_events\nstatus=PENDING · event_type=ORDER_CREATED
+    ORDERS -> PG : UPDATE idempotency_keys\nstatus=DONE · order_id=? · response_status=201
+    PG --> ORDERS : commit TX2
+    deactivate PG
+    ORDERS --> GW : 201 Created { id, status: PENDENTE, total }
+    GW --> PARTNER : 201 Created
+  end
+end
+
+deactivate ORDERS
+deactivate GW
+
+' ════════════════════════════════════
+'  FLUXO 2 — OUTBOX RELAY (async)
+' ════════════════════════════════════
+== Fluxo 2 · Outbox Relay (assíncrono · @Scheduled 1s) ==
+
+loop a cada 1 segundo — batch de 50 eventos
+  ORDERS -> PG : SELECT * FROM outbox_events\nWHERE status='PENDING'\nAND next_attempt_at <= NOW()\nFOR UPDATE SKIP LOCKED\nLIMIT 50
+  activate PG
+  PG --> ORDERS : lista de eventos pendentes
+  deactivate PG
+
+  ORDERS -> KAFKA : ProducerRecord\ntopic: order.events.order_created\nkey: orderId · value: OrderEvent
+  activate KAFKA
+
+  alt Kafka ACK OK
+    KAFKA --> ORDERS : ack
+    ORDERS -> PG : UPDATE outbox_events\nstatus=SENT
+  else Kafka FALHOU
+    KAFKA --> ORDERS : timeout / erro
+    note right of ORDERS
+      retry_count++
+      next_attempt_at = now + 30s × 2^retry
+      Se retry_count >= 5 → status=FAILED
+      log.error → alerta
+    end note
+    ORDERS -> PG : UPDATE outbox_events\nnext_attempt_at · retry_count\n[PENDING ou FAILED]
+  end
+
+  deactivate KAFKA
+end
+
+' ════════════════════════════════════
+'  FLUXO 3 — CONSUMIDORES KAFKA
+' ════════════════════════════════════
+== Fluxo 3 · Consumidores de Eventos ==
+
+KAFKA -> NOTIFY : order.events.order_created\n{ orderId, partnerId, total, status }
+activate NOTIFY
+note right of NOTIFY
+  Envia e-mail / push / webhook
+  para o parceiro
+end note
+NOTIFY --> KAFKA : commit offset
+deactivate NOTIFY
+
+KAFKA -> PAPI : order.events.order_created
+activate PAPI
+note right of PAPI
+  Atualiza dashboard do parceiro
+  Registra histórico de pedidos
+end note
+PAPI --> KAFKA : commit offset
+deactivate PAPI
+
+' ════════════════════════════════════
+'  FLUXO 4 — ATUALIZAR STATUS
+' ════════════════════════════════════
+== Fluxo 4 · Atualizar Status do Pedido ==
+
+PARTNER -> GW : PATCH /api/v1/orders/{id}/status\nBody: { status: "APROVADO" }
+activate GW
+GW -> ORDERS : roteia
+activate ORDERS
+
+ORDERS -> PG : SELECT * FROM orders WHERE id = ?
+activate PG
+PG --> ORDERS : Order { status: PENDENTE }
+deactivate PG
+
+note right of ORDERS
+  Máquina de estados:
+  PENDENTE → APROVADO ✓
+  APROVADO → EM_PROCESSAMENTO
+  EM_PROCESSAMENTO → ENVIADO
+  ENVIADO → ENTREGUE
+  * → CANCELADO (libera crédito)
+end note
+
+alt Transição válida
+  ORDERS -> PG : UPDATE orders SET status=APROVADO
+  PG --> ORDERS : OK
+  ORDERS --> GW : 200 OK { id, status: APROVADO }
+  GW --> PARTNER : 200 OK
+else Transição inválida
+  ORDERS --> GW : 422 Transição inválida
+  GW --> PARTNER : 422
+end
+
+deactivate ORDERS
+deactivate GW
+
+' ════════════════════════════════════
+'  FLUXO 5 — CANCELAMENTO
+' ════════════════════════════════════
+== Fluxo 5 · Cancelamento com Estorno de Crédito ==
+
+PARTNER -> GW : PATCH /api/v1/orders/{id}/status\nBody: { status: "CANCELADO" }
+activate GW
+GW -> ORDERS : roteia
+activate ORDERS
+
+ORDERS -> PG : SELECT * FROM orders WHERE id = ?
+activate PG
+PG --> ORDERS : Order { status: APROVADO, total: R$500 }
+deactivate PG
+
+note right of ORDERS
+  isCreditDebitable() = true
+  (status era APROVADO)
+  → crédito foi debitado → deve estornar
+end note
+
+ORDERS -> PG : UPDATE orders SET status=CANCELADO
+ORDERS -> PG : UPDATE partner_credit\navailable_credit += R$500\n(estorno)
+PG --> ORDERS : commit
+deactivate PG
+
+ORDERS --> GW  : 200 OK { status: CANCELADO }
+GW --> PARTNER : 200 OK
+
+deactivate ORDERS
+deactivate GW
+
+@enduml

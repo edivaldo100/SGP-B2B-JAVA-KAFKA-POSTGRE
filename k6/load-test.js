@@ -37,7 +37,7 @@ export const options = {
   },
 };
 
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
+const BASE_URL = __ENV.BASE_URL || 'http://localhost:80';
 
 // Parceiros pré-cadastrados (devem existir na tabela partner_credit)
 const PARTNERS = [
