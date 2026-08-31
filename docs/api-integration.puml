@@ -67,14 +67,38 @@ queue        "Kafka :9092"           as KAFKA   #ffe0b2
 collections  "Notif. API (futuro)"   as NOTIFY  #e1bee7
 
 ' ════════════════════════════════════
-'  FLUXO 1 — CRIAR PEDIDO
+'  FLUXO 1 — CRIAR PARCEIRO
 ' ════════════════════════════════════
-== Fluxo 1 · Criar Pedido ==
+== Fluxo 1 · Cadastrar Parceiro ==
+
+PARTNER -> GW : POST /api/v1/partners\n{ "name": "...", "creditLimit": 50000 }
+activate GW
+GW -> ORDERS : roteia
+activate ORDERS
+
+note right of ORDERS
+  creditLimit é opcional.
+  Se omitido → R$ 100.000.000,00
+end note
+
+ORDERS -> PG : INSERT partners
+ORDERS -> PG : INSERT partner_credit\n(creditLimit informado ou padrão)
+PG --> ORDERS : commit
+ORDERS --> GW : 201 Created { id, partnerUuid, name, createdAt }
+GW --> PARTNER : 201 Created
+
+deactivate ORDERS
+deactivate GW
+
+' ════════════════════════════════════
+'  FLUXO 2 — CRIAR PEDIDO
+' ════════════════════════════════════
+== Fluxo 2 · Criar Pedido ==
 
 PARTNER -> GW : POST /api/v1/orders\nHeaders: X-Partner-Id · Idempotency-Key\nBody: { items: [...] }
 activate GW
 
-GW -> ORDERS : roteia requisição
+GW -> ORDERS : roteia
 activate ORDERS
 
 note right of ORDERS
@@ -125,9 +149,9 @@ deactivate ORDERS
 deactivate GW
 
 ' ════════════════════════════════════
-'  FLUXO 2 — OUTBOX RELAY (async)
+'  FLUXO 3 — OUTBOX RELAY (async)
 ' ════════════════════════════════════
-== Fluxo 2 · Outbox Relay (assíncrono · @Scheduled 1s) ==
+== Fluxo 3 · Outbox Relay (assíncrono · @Scheduled 1s) ==
 
 loop a cada 1 segundo — batch de 50 eventos
   ORDERS -> PG : SELECT * FROM outbox_events\nWHERE status='PENDING'\nAND next_attempt_at <= NOW()\nFOR UPDATE SKIP LOCKED\nLIMIT 50
@@ -135,12 +159,17 @@ loop a cada 1 segundo — batch de 50 eventos
   PG --> ORDERS : lista de eventos pendentes
   deactivate PG
 
-  ORDERS -> KAFKA : ProducerRecord\ntopic: order.events.order_created\nkey: orderId · value: OrderEvent
+  ORDERS -> KAFKA : kafkaTemplate.send(topic, key, payload)\n.get(5, SECONDS)   ← síncrono
   activate KAFKA
 
   alt Kafka ACK OK
     KAFKA --> ORDERS : ack
     ORDERS -> PG : UPDATE outbox_events\nstatus=SENT
+    note right of ORDERS
+      publishEvent(KafkaConfirmedEvent)
+      → KafkaSseService recebe via @EventListener
+      → transmite para browsers conectados
+    end note
   else Kafka FALHOU
     KAFKA --> ORDERS : timeout / erro
     note right of ORDERS
@@ -156,9 +185,9 @@ loop a cada 1 segundo — batch de 50 eventos
 end
 
 ' ════════════════════════════════════
-'  FLUXO 3 — CONSUMIDORES KAFKA
+'  FLUXO 4 — CONSUMIDORES KAFKA
 ' ════════════════════════════════════
-== Fluxo 3 · Consumidores de Eventos ==
+== Fluxo 4 · Consumidores de Eventos (futuros) ==
 
 KAFKA -> NOTIFY : order.events.order_created\n{ orderId, partnerId, total, status }
 activate NOTIFY
@@ -170,72 +199,110 @@ NOTIFY --> KAFKA : commit offset
 deactivate NOTIFY
 
 ' ════════════════════════════════════
-'  FLUXO SSE — DASHBOARD TEMPO REAL
+'  FLUXO SSE PEDIDOS — DASHBOARD
 ' ════════════════════════════════════
-== Fluxo SSE · Dashboard Tempo Real ==
+== Fluxo SSE Pedidos · Dashboard Tempo Real ==
 
 BROWSER -> GW : GET /api/v1/orders/stream\nAccept: text/event-stream
 activate GW
-GW -> ORDERS : proxy HTTP/1.1\n(sem buffer)
+GW -> ORDERS : proxy HTTP/1.1 sem buffer
 activate ORDERS
 note right of ORDERS
   SseEmitter registrado no pool
   (OrderSseService)
+  Disparo: @TransactionalEventListener
+  phase=AFTER_COMMIT — não interfere
+  na transação de negócio
 end note
 ORDERS --> GW : 200 text/event-stream\n(conexão mantida aberta)
 GW --> BROWSER : stream aberto
 
-... pedido novo chegou ...
+... pedido novo ou status atualizado ...
 
 ORDERS -> BROWSER : event: order\ndata: { id, parceiro, status, total }
 note right of BROWSER
-  Linha aparece em verde
-  na tabela em tempo real
+  Aba "Histórico de Pedidos"
+  linha aparece em verde em tempo real
 end note
 
 ' ════════════════════════════════════
-'  FLUXO 4 — ATUALIZAR STATUS
+'  FLUXO SSE KAFKA — DASHBOARD
 ' ════════════════════════════════════
-== Fluxo 4 · Atualizar Status do Pedido ==
+== Fluxo SSE Kafka · Dashboard Eventos Confirmados ==
+
+BROWSER -> GW : GET /api/v1/orders/kafka/stream\nAccept: text/event-stream
+activate GW
+GW -> ORDERS : proxy HTTP/1.1 sem buffer
+activate ORDERS
+note right of ORDERS
+  KafkaSseService
+  Recebe KafkaConfirmedEvent via @EventListener
+  após OutboxPublisher confirmar Kafka ACK
+  Mantém histórico: últimos 20 eventos
+  Novos subscribers recebem o histórico
+  do mais antigo ao mais novo (prepend inverte)
+end note
+ORDERS --> GW : 200 text/event-stream\n(conexão mantida aberta)
+GW --> BROWSER : stream aberto
+
+... OutboxPublisher confirma envio ao Kafka ...
+
+ORDERS -> BROWSER : event: kafka\ndata: { topic, orderId, partnerId, status, receivedAt }
+note right of BROWSER
+  Aba "Eventos Kafka"
+  mostra confirmação real de que
+  o Kafka recebeu o evento
+end note
+
+' ════════════════════════════════════
+'  FLUXO 5 — ATUALIZAR STATUS
+' ════════════════════════════════════
+== Fluxo 5 · Atualizar Status do Pedido ==
 
 PARTNER -> GW : PATCH /api/v1/orders/{id}/status\nBody: { status: "APROVADO" }
 activate GW
 GW -> ORDERS : roteia
 activate ORDERS
 
-ORDERS -> PG : SELECT * FROM orders WHERE id = ?
-activate PG
-PG --> ORDERS : Order { status: PENDENTE }
-deactivate PG
+alt Status inválido (ex: "APROVADOX")
+  ORDERS --> GW : 400 Bad Request\n{ detail: "Requisição inválida: Cannot deserialize..." }
+  GW --> PARTNER : 400
+else Status válido
+  ORDERS -> PG : SELECT * FROM orders WHERE id = ?
+  activate PG
+  PG --> ORDERS : Order { status: PENDENTE }
+  deactivate PG
 
-note right of ORDERS
-  Máquina de estados:
-  PENDENTE → APROVADO ✓
-  APROVADO → EM_PROCESSAMENTO
-  EM_PROCESSAMENTO → ENVIADO
-  ENVIADO → ENTREGUE
-  * → CANCELADO (libera crédito)
-end note
+  note right of ORDERS
+    Máquina de estados:
+    PENDENTE → APROVADO ✓
+    APROVADO → EM_PROCESSAMENTO
+    EM_PROCESSAMENTO → ENVIADO
+    ENVIADO → ENTREGUE
+    * → CANCELADO (libera crédito)
+  end note
 
-alt Transição válida
-  ORDERS -> PG : UPDATE orders SET status=APROVADO
-  PG --> ORDERS : OK
-  ORDERS --> GW : 200 OK { id, status: APROVADO }
-  GW --> PARTNER : 200 OK
-else Transição inválida
-  ORDERS --> GW : 422 Transição inválida
-  GW --> PARTNER : 422
+  alt Transição válida
+    ORDERS -> PG : UPDATE orders SET status=APROVADO
+    ORDERS -> PG : INSERT outbox_events (ORDER_APPROVED)
+    PG --> ORDERS : OK
+    ORDERS --> GW : 200 OK { id, status: APROVADO }
+    GW --> PARTNER : 200 OK
+  else Transição inválida
+    ORDERS --> GW : 422 Transição inválida
+    GW --> PARTNER : 422
+  end
 end
 
 deactivate ORDERS
 deactivate GW
 
 ' ════════════════════════════════════
-'  FLUXO 5 — CANCELAMENTO
+'  FLUXO 6 — CANCELAMENTO
 ' ════════════════════════════════════
-== Fluxo 5 · Cancelamento com Estorno de Crédito ==
+== Fluxo 6 · Cancelamento com Estorno de Crédito ==
 
-PARTNER -> GW : PATCH /api/v1/orders/{id}/status\nBody: { status: "CANCELADO" }
+PARTNER -> GW : DELETE /api/v1/orders/{id}
 activate GW
 GW -> ORDERS : roteia
 activate ORDERS
@@ -252,7 +319,8 @@ note right of ORDERS
 end note
 
 ORDERS -> PG : UPDATE orders SET status=CANCELADO
-ORDERS -> PG : UPDATE partner_credit\navailable_credit += R$500\n(estorno)
+ORDERS -> PG : UPDATE partner_credit\navailable_credit += R$500 (estorno)
+ORDERS -> PG : INSERT outbox_events (ORDER_CANCELLED)
 PG --> ORDERS : commit
 deactivate PG
 

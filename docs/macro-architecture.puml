@@ -52,23 +52,23 @@ package "Clientes B2B" as C1 #f9fbe7 {
 '  LINHA 2 — Edge
 ' ════════════════════════════════════════════════════════════
 package "Edge · :80" as C2 #e8eaf6 {
-  rectangle "Nginx · API Gateway\n──────────\nRouting · Proxy Reverso\nSSE sem buffer\nSub-path Grafana" as GW #c5cae9
+  rectangle "Nginx · API Gateway\n──────────\nRouting · Proxy Reverso\nSSE sem buffer (HTTP/1.1)\nSub-path Grafana" as GW #c5cae9
 }
 
 ' ════════════════════════════════════════════════════════════
 '  LINHA 3 — Serviços
 ' ════════════════════════════════════════════════════════════
 package "Serviços" as C3 #e3f2fd {
-  rectangle "**Orders + Partners API**\n──────────\nJava 21 · Spring Boot 3.3.6\nVirtual Threads\nArquitetura Hexagonal\n/api/v1/orders\n/api/v1/partners\n/api/v1/orders/stream (SSE)" as API_ORDERS #bbdefb
-  rectangle "Dashboard UI\n──────────\nReact 18 + Vite 5\nHistórico em tempo real\nGrafana iframe\n/dashboard/" as DASH #c8e6c9
-  rectangle "Grafana 10.4\n──────────\nDashboard K6 #2587\n/grafana/"  as GRAF #e1bee7
+  rectangle "**Orders + Partners API**\n──────────\nJava 21 · Spring Boot 3.3.6\nVirtual Threads\nArquitetura Hexagonal\n/api/v1/orders\n/api/v1/partners\n/api/v1/orders/stream (SSE pedidos)\n/api/v1/orders/kafka/stream (SSE Kafka)\n/api/v1/partners-fakes" as API_ORDERS #bbdefb
+  rectangle "Dashboard UI\n──────────\nReact 18 + Vite 5\nHistórico em tempo real (SSE)\nEventos Kafka em tempo real (SSE)\nGerenciamento (CRUD parceiros/pedidos)\nGrafana iframe\n/dashboard/" as DASH #c8e6c9
+  rectangle "Grafana 10.4\n──────────\nDashboard K6 pré-provisionado\nUID: ffwswyewfdse8b\n/grafana/"  as GRAF #e1bee7
 }
 
 ' ════════════════════════════════════════════════════════════
 '  LINHA 4 — Mensageria
 ' ════════════════════════════════════════════════════════════
 package "Mensageria" as C4 #fff3e0 {
-  queue "Apache Kafka 3.8\n(KRaft · sem Zookeeper)\n:9092\n──────────\norder.events.*" as KAFKA
+  queue "Apache Kafka 3.8\n(KRaft · sem Zookeeper)\n:9092\n──────────\norder.events.order.created\norder.events.order.approved\norder.events.order.cancelled\n..." as KAFKA
 }
 
 ' ════════════════════════════════════════════════════════════
@@ -88,7 +88,8 @@ package "Padrões · Orders API" as C6 #fafafa {
     rectangle "Idempotência\nKey + SHA-256\nTTL 30s"  as PAT2 #f5f5f5
     rectangle "Outbox\nSKIP LOCKED\nBackoff 30s×2ⁿ" as PAT3 #f5f5f5
     rectangle "Pessimistic Lock\nSELECT FOR UPDATE\npartner_credit" as PAT4 #f5f5f5
-    rectangle "SSE\nApplicationEvent\nSseEmitter" as PAT5 #f5f5f5
+    rectangle "SSE Pedidos\n@AFTER_COMMIT\nSseEmitter" as PAT5 #f5f5f5
+    rectangle "SSE Kafka\nKafkaConfirmedEvent\n(sem consumer)" as PAT6 #f5f5f5
   }
 }
 
@@ -105,10 +106,10 @@ GW --> API_ORDERS : /api/
 GW --> DASH       : /dashboard/
 GW --> GRAF       : /grafana/
 
-API_ORDERS --> KAFKA  : Outbox Relay
-KAFKA      --> API_ORDERS : (consumidores futuros)
+API_ORDERS --> KAFKA : Outbox Relay\n(send().get(5s))
+KAFKA      -[hidden]-> API_ORDERS
 
-API_ORDERS --> PG     : JPA + Flyway
+API_ORDERS --> PG : JPA + Flyway
 
 K6     --> INFLUX : --out influxdb
 INFLUX --> GRAF   : datasource
@@ -118,5 +119,6 @@ API_ORDERS .. PAT2
 API_ORDERS .. PAT3
 API_ORDERS .. PAT4
 API_ORDERS .. PAT5
+API_ORDERS .. PAT6
 
 @enduml

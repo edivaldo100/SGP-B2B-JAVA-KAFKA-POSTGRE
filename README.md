@@ -16,18 +16,18 @@ Só. Nenhuma outra dependência local necessária.
 
 ## Subindo tudo com um único comando
 
-```sh
-docker-compose up --build -d
+```bash
+docker compose up --build -d
 ```
 
-Para acompanhar os logs:
-```sh
-docker-compose logs -f app
+Acompanhar logs da API:
+```bash
+docker compose logs -f app
 ```
 
-Para parar e remover volumes:
-```sh
-docker-compose down --volumes --remove-orphans
+Parar e remover volumes:
+```bash
+docker compose down --volumes --remove-orphans
 ```
 
 ---
@@ -42,13 +42,19 @@ docker-compose down --volumes --remove-orphans
 | Grafana (métricas K6) | http://localhost/grafana/ |
 | InfluxDB | http://localhost:8086 |
 
+O dashboard possui **4 abas**:
+- **Histórico de Pedidos** — tabela com SSE em tempo real + filtros por parceiro/status
+- **Eventos Kafka** — últimos 20 eventos confirmados pelo Kafka (ordenados do mais recente)
+- **Gerenciamento** — CRUD de parceiros e gerenciamento de pedidos
+- **Métricas (Grafana)** — dashboard K6 embutido
+
 ---
 
 ## Exemplos de uso (curl)
 
 ### Health Check
 
-```sh
+```bash
 curl http://localhost/actuator/health
 ```
 
@@ -60,9 +66,9 @@ curl http://localhost/actuator/health
 
 ### Dados de demonstração
 
-Cria 5 parceiros e ~15 pedidos com todos os status (PENDENTE, APROVADO, EM_PROCESSAMENTO, CANCELADO):
+Cria 5 parceiros e ~15 pedidos com todos os status:
 
-```sh
+```bash
 curl -X POST http://localhost/api/v1/partners-fakes
 ```
 
@@ -79,7 +85,7 @@ curl -X POST http://localhost/api/v1/partners-fakes
 ### Parceiros
 
 **Listar parceiros:**
-```sh
+```bash
 curl http://localhost/api/v1/partners
 ```
 
@@ -94,28 +100,42 @@ curl http://localhost/api/v1/partners
 ]
 ```
 
-**Cadastrar parceiro:**
-```sh
+**Cadastrar parceiro (crédito padrão R$ 100.000.000):**
+```bash
 curl -X POST http://localhost/api/v1/partners \
   -H "Content-Type: application/json" \
   -d '{"name": "Empresa XYZ"}'
+```
+
+**Cadastrar parceiro com limite de crédito personalizado:**
+```bash
+curl -X POST http://localhost/api/v1/partners \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Startup ABC", "creditLimit": 50000.00}'
 ```
 
 ```json
 {
   "id": 6,
   "partnerUuid": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "name": "Empresa XYZ",
+  "name": "Startup ABC",
   "createdAt": "2026-08-31T10:00:00"
 }
 ```
+
+**Remover parceiro:**
+```bash
+curl -X DELETE http://localhost/api/v1/partners/6
+```
+
+`HTTP 204 No Content`
 
 ---
 
 ### Pedidos
 
 **Criar pedido** (requer UUID do parceiro e Idempotency-Key único):
-```sh
+```bash
 curl -X POST http://localhost/api/v1/orders \
   -H "Content-Type: application/json" \
   -H "X-Partner-Id: {partnerUuid}" \
@@ -141,9 +161,16 @@ curl -X POST http://localhost/api/v1/orders \
       "quantity": 2,
       "unitPrice": 2499.90,
       "subtotal": 4999.80
+    },
+    {
+      "id": "...",
+      "productId": "MOUSE-GAMER",
+      "quantity": 5,
+      "unitPrice": 149.90,
+      "subtotal": 749.50
     }
   ],
-  "totalAmount": 5748.30,
+  "totalAmount": 5749.30,
   "status": "PENDENTE",
   "createdAt": "2026-08-31T10:00:00",
   "updatedAt": "2026-08-31T10:00:00"
@@ -151,37 +178,37 @@ curl -X POST http://localhost/api/v1/orders \
 ```
 
 **Listar todos os pedidos:**
-```sh
+```bash
 curl http://localhost/api/v1/orders
 ```
 
 **Filtrar por parceiro (ID sequencial):**
-```sh
+```bash
 curl "http://localhost/api/v1/orders?partnerId=1"
 ```
 
 **Filtrar por nome do parceiro:**
-```sh
+```bash
 curl "http://localhost/api/v1/orders?name=TechCorp"
 ```
 
 **Filtrar por status:**
-```sh
+```bash
 curl "http://localhost/api/v1/orders?status=APROVADO"
 ```
 
 **Filtrar combinando parceiro e status:**
-```sh
+```bash
 curl "http://localhost/api/v1/orders?partnerId=1&status=PENDENTE"
 ```
 
 **Buscar pedido por ID:**
-```sh
+```bash
 curl http://localhost/api/v1/orders/{orderId}
 ```
 
 **Atualizar status do pedido:**
-```sh
+```bash
 curl -X PATCH http://localhost/api/v1/orders/{orderId}/status \
   -H "Content-Type: application/json" \
   -d '{"status": "APROVADO"}'
@@ -191,35 +218,60 @@ curl -X PATCH http://localhost/api/v1/orders/{orderId}/status \
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "partnerName": "TechCorp Distribuidora",
-  "totalAmount": 5748.30,
+  "totalAmount": 5749.30,
   "status": "APROVADO",
   "createdAt": "2026-08-31T10:00:00",
   "updatedAt": "2026-08-31T10:01:00"
 }
 ```
 
-Status válidos (máquina de estados):
+Status válidos:
 ```
 PENDENTE → APROVADO → EM_PROCESSAMENTO → ENVIADO → ENTREGUE
 * → CANCELADO  (qualquer status — estorna crédito automaticamente)
 ```
 
+Enviar um valor de status inválido retorna **HTTP 400**:
+```bash
+curl -X PATCH http://localhost/api/v1/orders/{orderId}/status \
+  -H "Content-Type: application/json" \
+  -d '{"status": "INVALIDO"}'
+```
+
+```json
+{
+  "status": 400,
+  "detail": "Requisição inválida: Cannot deserialize value of type `OrderStatus` from String \"INVALIDO\"...",
+  "timestamp": "2026-08-31T10:00:00Z"
+}
+```
+
 **Cancelar pedido:**
-```sh
+```bash
 curl -X DELETE http://localhost/api/v1/orders/{orderId}
 ```
 
-**Stream em tempo real (SSE) — atualiza ao criar ou mudar status:**
-```sh
+**Stream de pedidos em tempo real (SSE):**
+```bash
 curl -N -H "Accept: text/event-stream" http://localhost/api/v1/orders/stream
 ```
 
 ```
 event: order
-data: {"id":"550e8400...","partnerName":"TechCorp","status":"APROVADO","totalAmount":5748.30,...}
+data: {"id":"550e8400...","partnerName":"TechCorp","status":"APROVADO","totalAmount":5749.30,...}
+```
 
-event: order
-data: {"id":"660e9500...","partnerName":"InfoShop","status":"PENDENTE","totalAmount":1234.50,...}
+**Stream de eventos Kafka confirmados (SSE — últimos 20):**
+```bash
+curl -N -H "Accept: text/event-stream" http://localhost/api/v1/orders/kafka/stream
+```
+
+```
+event: kafka
+data: {"topic":"order.events.order.created","orderId":"550e8400...","partnerId":"3fa85f64...","status":"PENDENTE","receivedAt":"2026-08-31T10:00:00Z"}
+
+event: kafka
+data: {"topic":"order.events.order.approved","orderId":"550e8400...","partnerId":"3fa85f64...","status":"APROVADO","receivedAt":"2026-08-31T10:01:00Z"}
 ```
 
 ---
@@ -227,13 +279,13 @@ data: {"id":"660e9500...","partnerName":"InfoShop","status":"PENDENTE","totalAmo
 ## Teste de carga K6
 
 **Windows:**
-```sh
-$env:K6_SCRIPT_FILE='test.js'; docker-compose run --rm k6_tester
+```bash
+$env:K6_SCRIPT_FILE='test.js'; docker compose run --rm k6_tester
 ```
 
 **Linux / macOS:**
-```sh
-K6_SCRIPT_FILE=test.js docker-compose run --rm k6_tester
+```bash
+K6_SCRIPT_FILE=test.js docker compose run --rm k6_tester
 ```
 
 Resultados disponíveis no Grafana: http://localhost/grafana/d/ffwswyewfdse8b/k6-load-testing-results
@@ -260,7 +312,8 @@ Parceiro / Browser / K6
    ├── Idempotência (SHA-256 + TTL 30s)
    ├── Pessimistic Lock (SELECT FOR UPDATE)
    ├── Outbox Pattern (SKIP LOCKED · backoff exponencial)
-   └── SSE (Server-Sent Events em tempo real)
+   ├── SSE pedidos em tempo real  (/api/v1/orders/stream)
+   └── SSE eventos Kafka          (/api/v1/orders/kafka/stream)
         │
         ├── PostgreSQL 16
         │    orders · order_items · partners
@@ -268,6 +321,7 @@ Parceiro / Browser / K6
         │
         └── Apache Kafka 3.8 (KRaft)
              order.events.*
+             └── OutboxPublisher → KafkaConfirmedEvent → KafkaSseService → Browser
 ```
 
 Diagramas PlantUML em [`docs/`](docs/):
@@ -283,11 +337,13 @@ Diagramas PlantUML em [`docs/`](docs/):
 
 ## Funcionalidades
 
-- **Gestão de parceiros** — cadastro com ID sequencial (humano) + UUID (sistema)
-- **Gestão de pedidos** — criação com controle de crédito, histórico e filtros
+- **Gestão de parceiros** — cadastro com ID sequencial (humano) + UUID (sistema); crédito inicial configurável; remoção via API
+- **Gestão de pedidos** — criação com controle de crédito, histórico, filtros por parceiro/nome/status
 - **Idempotência** — garante que reenvios da mesma requisição não criam duplicatas
 - **Controle de crédito** — `SELECT FOR UPDATE` garante consistência sob concorrência
 - **Outbox Pattern** — publicação garantida no Kafka mesmo sob falhas
-- **SSE** — novos pedidos aparecem no dashboard em tempo real sem polling
-- **Dashboard React** — histórico de pedidos ao vivo + métricas Grafana
-- **Teste de carga** — K6 → InfluxDB → Grafana
+- **SSE pedidos** — novos pedidos e mudanças de status aparecem no dashboard em tempo real
+- **SSE Kafka** — cada evento confirmado pelo produtor Kafka é transmitido para o dashboard via `KafkaConfirmedEvent` (sem consumer, sem offset)
+- **Dashboard React** — 4 abas: Histórico · Eventos Kafka · Gerenciamento (CRUD) · Métricas Grafana
+- **Erros semânticos** — enum inválido retorna HTTP 400 (não 500); erros de validação seguem RFC 9457 ProblemDetail
+- **Teste de carga** — K6 → InfluxDB → Grafana (dashboard pré-provisionado)

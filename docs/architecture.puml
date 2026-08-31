@@ -69,7 +69,7 @@ actor "Browser Dashboard"  as BROWSER
 '  EDGE
 ' ═══════════════════════════════════════════════════════
 package "Edge · Nginx :80" as PKG_EDGE {
-  component "API Gateway\nRouting · Proxy Reverso\nSSE sem buffer" as GW
+  component "API Gateway\nRouting · Proxy Reverso\nSSE HTTP/1.1 sem buffer" as GW
 }
 
 ' ═══════════════════════════════════════════════════════
@@ -80,22 +80,33 @@ package "Adapter IN · Web" as PKG_WEB {
   note right of CTRL
     POST   /api/v1/orders
     PATCH  /api/v1/orders/{id}/status
-    DELETE /api/v1/orders/{id}
+    DELETE /api/v1/orders/{id}   (cancelar)
     GET    /api/v1/orders/{id}
-    GET    /api/v1/orders  (filtros opcionais)
-    GET    /api/v1/orders/stream  (SSE)
+    GET    /api/v1/orders         (filtros opcionais)
+    GET    /api/v1/orders/stream  (SSE pedidos)
+    GET    /api/v1/orders/kafka/stream (SSE Kafka)
     ──────────────────────────────
     Headers: X-Partner-Id · Idempotency-Key
     Erros: RFC 9457 ProblemDetail
+    400 para enum inválido (HttpMessageNotReadableException)
   end note
 
   component "PartnerController" as PCTRL
   note right of PCTRL
-    POST /api/v1/partners
-    GET  /api/v1/partners
+    POST   /api/v1/partners          (creditLimit opcional)
+    GET    /api/v1/partners
+    DELETE /api/v1/partners/{id}
   end note
 
-  component "OrderSseService\nSseEmitter pool\n@EventListener" as SSE
+  component "FakeDataController" as FCTRL
+  note right of FCTRL
+    POST /api/v1/partners-fakes
+    Cria parceiros + pedidos de demo
+  end note
+
+  component "OrderSseService\nSseEmitter pool\n@TransactionalEventListener\n(AFTER_COMMIT)" as SSE
+
+  component "KafkaSseService\nSseEmitter pool\n@EventListener\nhistória: 20 eventos" as KAFKA_SSE
 }
 
 ' ═══════════════════════════════════════════════════════
@@ -122,16 +133,21 @@ package "Application · Use Cases" as PKG_APP {
     EM_PROCESSAMENTO → ENVIADO
     ENVIADO → ENTREGUE
     * → CANCELADO (libera crédito)
+    Salva OutboxEvent por transição
   end note
+
+  component "CancelOrderService" as SVC_CANCEL
 
   component "FindOrderService\n(N+1 evitado: 1 query\npara todos os partners)" as SVC_FIND
 
   component "PartnerService" as SVC_PARTNER
   note right of SVC_PARTNER
-    create(): valida unicidade de nome
+    create(name, creditLimit?):
+    └─ valida unicidade de nome
     └─ salva Partner + PartnerCredit
-       (limite R$100M por padrão)
+       (creditLimit ou padrão R$100M)
     findAll()
+    delete(id)
   end note
 }
 
@@ -145,6 +161,7 @@ package "Domain · Model" as PKG_DOM {
   component "PartnerCredit\nhasCredit() · debit() · release()\n[@Version — Optimistic Lock]" as CREDIT
   component "IdempotencyRecord\ncreateProcessing() · isDone()\nTTL 30s" as IDEM
   component "OutboxEvent\nMAX_RETRIES=5\nBackoff 30s×2ⁿ" as OUTBOX
+  component "KafkaConfirmedEvent\n(Spring ApplicationEvent)\ntopic · payload" as KCE
 
   ORDER "1" *-down- "N" ITEM : contém
 }
@@ -154,7 +171,7 @@ package "Domain · Model" as PKG_DOM {
 ' ═══════════════════════════════════════════════════════
 package "Ports · Out" as PKG_PORTS {
   interface "OrderRepository"         as P_ORDER
-  interface "PartnerRepository"       as P_PARTNER
+  interface "PartnerRepository\n+ deleteById()" as P_PARTNER
   interface "PartnerCreditRepository" as P_CREDIT
   interface "IdempotencyRepository"   as P_IDEM
   interface "OutboxEventRepository"   as P_OUTBOX
@@ -175,7 +192,7 @@ package "Adapter OUT · JPA / Flyway 10" as PKG_JPA {
 '  ADAPTER OUT — Messaging
 ' ═══════════════════════════════════════════════════════
 package "Adapter OUT · Messaging" as PKG_MSG {
-  component "OutboxPublisher\n@Scheduled fixedDelay=1s\nbatch=50" as PUBLISHER
+  component "OutboxPublisher\n@Scheduled fixedDelay=1s\nbatch=50\nsend().get(5s) — síncrono" as PUBLISHER
 }
 
 ' ═══════════════════════════════════════════════════════
@@ -199,25 +216,30 @@ BROWSER --> GW : HTTP :80
 
 GW --> CTRL  : /api/v1/orders
 GW --> PCTRL : /api/v1/partners
+GW --> FCTRL : /api/v1/partners-fakes
 
 CTRL  --> SVC_CREATE  : CreateOrderCommand
 CTRL  --> SVC_UPDATE  : UpdateOrderStatusCommand
+CTRL  --> SVC_CANCEL  : orderId
 CTRL  --> SVC_FIND    : search / findById
-CTRL  --> SSE         : subscribe()
-PCTRL --> SVC_PARTNER : create / findAll
+CTRL  --> SSE         : subscribe() (pedidos)
+CTRL  --> KAFKA_SSE   : subscribe() (kafka)
+PCTRL --> SVC_PARTNER : create(name, creditLimit?) / findAll / delete
 
 SVC_CREATE  --> ORDER   : Order.create()
 SVC_CREATE  --> IDEM    : createProcessing
 SVC_CREATE  --> CREDIT  : debit
-SVC_CREATE  --> SSE     : publishEvent
+SVC_CREATE  --> SSE     : publishEvent(OrderCreatedEvent)
 
 SVC_UPDATE  --> ORDER   : approve / cancel
 SVC_UPDATE  --> CREDIT  : release
+SVC_CANCEL  --> ORDER   : cancel
+SVC_CANCEL  --> CREDIT  : release
 
 SVC_FIND    --> P_ORDER   : search
 SVC_FIND    --> P_PARTNER : findAll (1 query)
 
-SVC_PARTNER --> P_PARTNER : save
+SVC_PARTNER --> P_PARTNER : save / findById / deleteById
 SVC_PARTNER --> P_CREDIT  : save
 
 SVC_CREATE --> P_ORDER  : save
@@ -226,6 +248,7 @@ SVC_CREATE --> P_IDEM   : tryInsert / markDone
 SVC_CREATE --> P_OUTBOX : save
 SVC_UPDATE --> P_ORDER  : findById / save
 SVC_UPDATE --> P_CREDIT : save
+SVC_UPDATE --> P_OUTBOX : save
 
 P_ORDER   ..|> A_ORDER
 P_PARTNER ..|> A_PARTNER
@@ -239,8 +262,10 @@ A_CREDIT  --> PG
 A_IDEM    --> PG
 A_OUTBOX  --> PG
 
-PUBLISHER --> A_OUTBOX : findPendingForUpdate\nmarkSent / markFailed
-PUBLISHER --> KAFKA    : send(event)
+PUBLISHER --> A_OUTBOX : findPendingForUpdate\nmarkPublished / markFailed
+PUBLISHER --> KAFKA    : send(topic, key, payload)
+PUBLISHER --> KCE      : publishEvent(KafkaConfirmedEvent)
+KCE       --> KAFKA_SSE : @EventListener onKafkaConfirmed
 
 K6     --> INFLUX  : --out influxdb
 INFLUX --> GRAFANA : datasource
