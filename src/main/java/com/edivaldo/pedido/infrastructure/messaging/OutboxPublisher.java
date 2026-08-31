@@ -4,6 +4,7 @@ import com.edivaldo.pedido.domain.model.OutboxEvent;
 import com.edivaldo.pedido.domain.port.out.OutboxEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -22,6 +23,7 @@ public class OutboxPublisher {
 
     private final OutboxEventRepository outboxEventRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Scheduled(fixedDelay = 1000)
     @Transactional
@@ -34,12 +36,12 @@ public class OutboxPublisher {
         for (OutboxEvent event : events) {
             String topic = TOPIC_PREFIX + event.getEventType().toLowerCase().replace("_", ".");
             try {
-                // Envio síncrono: bloqueia até Kafka confirmar (ou timeout 5s)
-                // markPublished roda na mesma transação — sem chance de re-publicar
                 kafkaTemplate.send(topic, event.getAggregateId().toString(), event.getPayload())
                         .get(5, TimeUnit.SECONDS);
                 outboxEventRepository.markPublished(event.getId());
                 log.debug("Evento publicado: {} -> {}", event.getId(), topic);
+                // Notifica o SSE após confirmação do Kafka (sem consumer, sem offset)
+                eventPublisher.publishEvent(new KafkaConfirmedEvent(topic, event.getPayload()));
             } catch (Exception e) {
                 handleFailure(event, e);
             }
