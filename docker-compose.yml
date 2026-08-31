@@ -1,10 +1,11 @@
 services:
+
   postgres:
-    image: postgres:13
-    container_name: pedido-postgres
-    restart: always
+    image: postgres:16-alpine
+    container_name: orders-postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: sgpdb
+      POSTGRES_DB: orders_db
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
     ports:
@@ -12,96 +13,60 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d sgpdb"]
+      test: ["CMD-SHELL", "pg_isready -U user -d orders_db"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 10s
 
-  registry:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        MODULE_NAME: registry
-    container_name: pedido-registry
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: orders-kafka
+    restart: unless-stopped
+    environment:
+      - KAFKA_CFG_NODE_ID=1
+      - KAFKA_CFG_PROCESS_ROLES=broker,controller
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - ALLOW_PLAINTEXT_LISTENER=yes
     ports:
-      - "8761:8761"
-    environment:
-      EUREKA_CLIENT_REGISTER_WITH_EUREKA: "false"
-      EUREKA_CLIENT_FETCH_REGISTRY: "false"
+      - "9092:9092"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
-      interval: 10s # Verifica a cada 10 segundos
-      timeout: 5s # Espera até 5 segundos
-      retries: 10 # Tenta 10 vezes antes de considerar unhealthy
-      start_period: 90s # Dá 90 segundos para o Eureka Server inicializar totalmente e estar pronto
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
 
-  restapi:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        MODULE_NAME: restapi
-#    ports:
-#      - "8080:8080"
+    container_name: orders-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
     environment:
-      # Configurações para conectar ao PostgreSQL e ao Eureka Registry
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/sgpdb
-      SPRING_DATASOURCE_USERNAME: user
-      SPRING_DATASOURCE_PASSWORD: password
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://registry:8761/eureka # Conecta ao Eureka Registry
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: orders_db
+      DB_USERNAME: user
+      DB_PASSWORD: password
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
       postgres:
-        condition: service_healthy # Garante que o Postgres esteja saudável antes de iniciar
-      registry:
-        condition: service_healthy # Garante que o Registry esteja saudável antes de iniciar
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"] # Verifica o endpoint de saúde da API
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 60s # Dá 60 segundos para a API iniciar e se registrar no Eureka
-    deploy:
-      replicas: 2
-      restart_policy:
-        condition: on-failure
-  gateway:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        MODULE_NAME: gateway
-    container_name: pedido-gateway
-    ports:
-      - "80:8080" # Mapeia a porta 80 do host para a 8080 do gateway (padrão HTTP)
-    environment:
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://registry:8761/eureka # Conecta ao Eureka Registry
-    depends_on:
-      registry:
-        condition: service_healthy # Gateway precisa do Registry para descoberta
-      restapi:
-        condition: service_healthy # Gateway precisa do restapi para rotear requisições
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"] # Verifica o endpoint de saúde do Gateway
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 60s # Dá 60 segundos para o Gateway iniciar e descobrir serviços
-  k6_tester:
-    image: grafana/k6 # Imagem oficial do k6
-    volumes:
-      - ./testes:/src # Mapeia seu script de teste para dentro do contêiner
-    command: run /src/${K6_SCRIPT_FILE} # Comando para executar o teste
-    # Se quiser que o k6 espere pelos outros serviços estarem saudáveis antes de rodar
-    depends_on:
-      gateway:
         condition: service_healthy
-      restapi:
-        condition: service_healthy # Opcional, mas garante que as réplicas estão prontas
-    networks:
-      - default # Garante que o k6 esteja na mesma rede Docker dos seus outros serviços
-    environment:
-       K6_SCRIPT_FILE: test.js
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
 volumes:
-  postgres_data: # Volume para persistência dos dados do PostgreSQL
+  postgres_data:
