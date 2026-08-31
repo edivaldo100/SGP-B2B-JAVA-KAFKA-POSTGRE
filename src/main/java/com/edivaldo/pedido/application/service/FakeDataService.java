@@ -79,7 +79,7 @@ public class FakeDataService {
         List<PartnerResponse> lista = new ArrayList<>();
         for (String nome : NOMES_PARCEIROS) {
             try {
-                lista.add(partnerService.create(nome));
+                lista.add(partnerService.create(nome, null));
             } catch (IllegalArgumentException e) {
                 partnerService.findAll().stream()
                     .filter(p -> p.name().equals(nome))
