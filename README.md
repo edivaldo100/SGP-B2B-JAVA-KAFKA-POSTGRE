@@ -21,11 +21,13 @@ docker compose up --build -d
 ```
 
 Acompanhar logs da API:
+
 ```bash
 docker compose logs -f app
 ```
 
 Parar e remover volumes:
+
 ```bash
 docker compose down --volumes --remove-orphans
 ```
@@ -34,15 +36,16 @@ docker compose down --volumes --remove-orphans
 
 ## URLs disponíveis
 
-| Serviço | URL |
-|---|---|
-| Dashboard (React) | http://localhost/dashboard/ |
-| Swagger UI | http://localhost/swagger-ui/index.html |
-| API Health | http://localhost/actuator/health |
-| Grafana (métricas K6) | http://localhost/grafana/ |
-| InfluxDB | http://localhost:8086 |
+| Serviço               | URL                                    |
+| --------------------- | -------------------------------------- |
+| Dashboard (React)     | http://localhost/dashboard/            |
+| Swagger UI            | http://localhost/swagger-ui/index.html |
+| API Health            | http://localhost/actuator/health       |
+| Grafana (métricas K6) | http://localhost/grafana/              |
+| InfluxDB              | http://localhost:8086                  |
 
 O dashboard possui **4 abas**:
+
 - **Histórico de Pedidos** — tabela com SSE em tempo real + filtros por parceiro/status
 - **Eventos Kafka** — últimos 20 eventos confirmados pelo Kafka (ordenados do mais recente)
 - **Gerenciamento** — CRUD de parceiros e gerenciamento de pedidos
@@ -85,6 +88,7 @@ curl -X POST http://localhost/api/v1/partners-fakes
 ### Parceiros
 
 **Listar parceiros:**
+
 ```bash
 curl http://localhost/api/v1/partners
 ```
@@ -101,6 +105,7 @@ curl http://localhost/api/v1/partners
 ```
 
 **Cadastrar parceiro (crédito padrão R$ 100.000.000):**
+
 ```bash
 curl -X POST http://localhost/api/v1/partners \
   -H "Content-Type: application/json" \
@@ -108,6 +113,7 @@ curl -X POST http://localhost/api/v1/partners \
 ```
 
 **Cadastrar parceiro com limite de crédito personalizado:**
+
 ```bash
 curl -X POST http://localhost/api/v1/partners \
   -H "Content-Type: application/json" \
@@ -124,6 +130,7 @@ curl -X POST http://localhost/api/v1/partners \
 ```
 
 **Remover parceiro:**
+
 ```bash
 curl -X DELETE http://localhost/api/v1/partners/6
 ```
@@ -135,6 +142,7 @@ curl -X DELETE http://localhost/api/v1/partners/6
 ### Pedidos
 
 **Criar pedido** (requer UUID do parceiro e Idempotency-Key único):
+
 ```bash
 curl -X POST http://localhost/api/v1/orders \
   -H "Content-Type: application/json" \
@@ -159,18 +167,18 @@ curl -X POST http://localhost/api/v1/orders \
       "id": "...",
       "productId": "NOTEBOOK-PRO",
       "quantity": 2,
-      "unitPrice": 2499.90,
-      "subtotal": 4999.80
+      "unitPrice": 2499.9,
+      "subtotal": 4999.8
     },
     {
       "id": "...",
       "productId": "MOUSE-GAMER",
       "quantity": 5,
-      "unitPrice": 149.90,
-      "subtotal": 749.50
+      "unitPrice": 149.9,
+      "subtotal": 749.5
     }
   ],
-  "totalAmount": 5749.30,
+  "totalAmount": 5749.3,
   "status": "PENDENTE",
   "createdAt": "2026-08-31T10:00:00",
   "updatedAt": "2026-08-31T10:00:00"
@@ -178,36 +186,43 @@ curl -X POST http://localhost/api/v1/orders \
 ```
 
 **Listar todos os pedidos:**
+
 ```bash
 curl http://localhost/api/v1/orders
 ```
 
 **Filtrar por parceiro (ID sequencial):**
+
 ```bash
 curl "http://localhost/api/v1/orders?partnerId=1"
 ```
 
 **Filtrar por nome do parceiro:**
+
 ```bash
 curl "http://localhost/api/v1/orders?name=TechCorp"
 ```
 
 **Filtrar por status:**
+
 ```bash
 curl "http://localhost/api/v1/orders?status=APROVADO"
 ```
 
 **Filtrar combinando parceiro e status:**
+
 ```bash
 curl "http://localhost/api/v1/orders?partnerId=1&status=PENDENTE"
 ```
 
 **Buscar pedido por ID:**
+
 ```bash
 curl http://localhost/api/v1/orders/{orderId}
 ```
 
 **Atualizar status do pedido:**
+
 ```bash
 curl -X PATCH http://localhost/api/v1/orders/{orderId}/status \
   -H "Content-Type: application/json" \
@@ -218,7 +233,7 @@ curl -X PATCH http://localhost/api/v1/orders/{orderId}/status \
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "partnerName": "TechCorp Distribuidora",
-  "totalAmount": 5749.30,
+  "totalAmount": 5749.3,
   "status": "APROVADO",
   "createdAt": "2026-08-31T10:00:00",
   "updatedAt": "2026-08-31T10:01:00"
@@ -226,12 +241,14 @@ curl -X PATCH http://localhost/api/v1/orders/{orderId}/status \
 ```
 
 Status válidos:
+
 ```
 PENDENTE → APROVADO → EM_PROCESSAMENTO → ENVIADO → ENTREGUE
 * → CANCELADO  (qualquer status — estorna crédito automaticamente)
 ```
 
 Enviar um valor de status inválido retorna **HTTP 400**:
+
 ```bash
 curl -X PATCH http://localhost/api/v1/orders/{orderId}/status \
   -H "Content-Type: application/json" \
@@ -247,11 +264,13 @@ curl -X PATCH http://localhost/api/v1/orders/{orderId}/status \
 ```
 
 **Cancelar pedido:**
+
 ```bash
 curl -X DELETE http://localhost/api/v1/orders/{orderId}
 ```
 
 **Stream de pedidos em tempo real (SSE):**
+
 ```bash
 curl -N -H "Accept: text/event-stream" http://localhost/api/v1/orders/stream
 ```
@@ -262,6 +281,7 @@ data: {"id":"550e8400...","partnerName":"TechCorp","status":"APROVADO","totalAmo
 ```
 
 **Stream de eventos Kafka confirmados (SSE — últimos 20):**
+
 ```bash
 curl -N -H "Accept: text/event-stream" http://localhost/api/v1/orders/kafka/stream
 ```
@@ -279,11 +299,13 @@ data: {"topic":"order.events.order.approved","orderId":"550e8400...","partnerId"
 ## Teste de carga K6
 
 **Windows:**
+
 ```bash
 $env:K6_SCRIPT_FILE='test.js'; docker compose run --rm k6_tester
 ```
 
 **Linux / macOS:**
+
 ```bash
 K6_SCRIPT_FILE=test.js docker compose run --rm k6_tester
 ```
@@ -338,24 +360,11 @@ Parceiro / Browser / K6
 
 Fontes PlantUML em [`docs/`](docs/):
 
-| Arquivo | Conteúdo |
-|---|---|
-| `overview.puml` | Visão simplificada do sistema |
-| `macro-architecture.puml` | Macro arquitetura por camadas |
-| `architecture.puml` | Arquitetura hexagonal completa |
-| `api-integration.puml` | Fluxos de integração e SSE |
+| Arquivo                   | Conteúdo                       |
+| ------------------------- | ------------------------------ |
+| `overview.puml`           | Visão simplificada do sistema  |
+| `macro-architecture.puml` | Macro arquitetura por camadas  |
+| `architecture.puml`       | Arquitetura hexagonal completa |
+| `api-integration.puml`    | Fluxos de integração e SSE     |
 
 ---
-
-## Funcionalidades
-
-- **Gestão de parceiros** — cadastro com ID sequencial (humano) + UUID (sistema); crédito inicial configurável; remoção via API
-- **Gestão de pedidos** — criação com controle de crédito, histórico, filtros por parceiro/nome/status
-- **Idempotência** — garante que reenvios da mesma requisição não criam duplicatas
-- **Controle de crédito** — `SELECT FOR UPDATE` garante consistência sob concorrência
-- **Outbox Pattern** — publicação garantida no Kafka mesmo sob falhas
-- **SSE pedidos** — novos pedidos e mudanças de status aparecem no dashboard em tempo real
-- **SSE Kafka** — cada evento confirmado pelo produtor Kafka é transmitido para o dashboard via `KafkaConfirmedEvent` (sem consumer, sem offset)
-- **Dashboard React** — 4 abas: Histórico · Eventos Kafka · Gerenciamento (CRUD) · Métricas Grafana
-- **Erros semânticos** — enum inválido retorna HTTP 400 (não 500); erros de validação seguem RFC 9457 ProblemDetail
-- **Teste de carga** — K6 → InfluxDB → Grafana (dashboard pré-provisionado)
