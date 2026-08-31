@@ -51,10 +51,11 @@ export function setup() {
   console.log('Health check OK');
 
   const partners = [];
+  const runId = Date.now();
   for (let i = 1; i <= 5; i++) {
     const res = http.post(
       `${BASE_URL}/api/v1/partners`,
-      JSON.stringify({ name: `K6 Partner ${i}`, creditLimit: 10000000 }),
+      JSON.stringify({ name: `K6 Partner ${runId}-${i}`, creditLimit: 10000000 }),
       { headers: { 'Content-Type': 'application/json' } }
     );
     if (res.status === 201 || res.status === 200) {
