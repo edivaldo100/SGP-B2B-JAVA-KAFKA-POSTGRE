@@ -38,6 +38,10 @@ public class IdempotencyRecord {
         return !this.requestHash.equals(incomingHash);
     }
 
+    public boolean isDone() {
+        return status == Status.DONE;
+    }
+
     public boolean isExpired() {
         return status == Status.PROCESSING && LocalDateTime.now().isAfter(expiresAt);
     }
