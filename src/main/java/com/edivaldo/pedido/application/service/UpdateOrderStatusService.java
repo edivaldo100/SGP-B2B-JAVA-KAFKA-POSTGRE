@@ -41,31 +41,25 @@ public class UpdateOrderStatusService implements UpdateOrderStatusUseCase {
         boolean wasDebitable = order.isCreditDebitable();
         applyTransition(order, command.newStatus());
 
-        // debita crédito ao aprovar — com lock para garantir consistência
+        // debita crédito ao aprovar — UPDATE atômico condicional, sem lock de leitura
         if (command.newStatus() == OrderStatus.APROVADO) {
-            PartnerCredit credit = partnerCreditRepository
-                    .findByPartnerIdForUpdate(order.getPartnerId())
-                    .orElseThrow(() -> new PartnerNotFoundException(order.getPartnerId()));
-            if (!credit.hasCredit(order.getTotalAmount())) {
+            boolean debited = partnerCreditRepository.debit(order.getPartnerId(), order.getTotalAmount());
+            if (!debited) {
+                PartnerCredit credit = partnerCreditRepository.findByPartnerId(order.getPartnerId())
+                        .orElseThrow(() -> new PartnerNotFoundException(order.getPartnerId()));
                 throw new InsufficientCreditException(
                         String.format("Credito insuficiente ao aprovar pedido %s: necessario %s, disponivel %s",
                                 order.getId(), order.getTotalAmount(), credit.getAvailableCredit()));
             }
-            credit.debit(order.getTotalAmount());
-            partnerCreditRepository.save(credit);
             creditTransactionRepository.save(
                     CreditTransaction.debit(order.getPartnerId(), order.getId(), order.getTotalAmount()));
         }
 
         // estorna crédito se cancelado após ter sido debitado (aprovado ou além)
         if (command.newStatus() == OrderStatus.CANCELADO && wasDebitable) {
-            partnerCreditRepository.findByPartnerIdForUpdate(order.getPartnerId())
-                    .ifPresent(credit -> {
-                        credit.release(order.getTotalAmount());
-                        partnerCreditRepository.save(credit);
-                        creditTransactionRepository.save(
-                                CreditTransaction.release(order.getPartnerId(), order.getId(), order.getTotalAmount()));
-                    });
+            partnerCreditRepository.release(order.getPartnerId(), order.getTotalAmount());
+            creditTransactionRepository.save(
+                    CreditTransaction.release(order.getPartnerId(), order.getId(), order.getTotalAmount()));
         }
 
         Order updated = orderRepository.save(order);
