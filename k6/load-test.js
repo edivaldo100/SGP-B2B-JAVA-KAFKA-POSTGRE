@@ -19,10 +19,10 @@ export const options = {
       executor: 'ramping-vus',
       startVUs: 0,
       stages: [
-        { duration: '30s', target: 20  },  // aquecimento
-        { duration: '1m',  target: 50  },  // carga normal
-        { duration: '30s', target: 100 },  // pico
-        { duration: '30s', target: 50  },  // volta ao normal
+        { duration: '30s', target: 100 },  // aquecimento
+        { duration: '1m',  target: 300 },  // carga normal
+        { duration: '1m',  target: 600 },  // pico
+        { duration: '30s', target: 300 },  // volta ao normal
         { duration: '30s', target: 0   },  // resfriamento
       ],
       gracefulRampDown: '10s',
@@ -52,7 +52,8 @@ export function setup() {
 
   const partners = [];
   const runId = Date.now();
-  for (let i = 1; i <= 5; i++) {
+  const PARTNER_COUNT = 60; // mais parceiros = menos contenção no lock pessimista de PartnerCredit
+  for (let i = 1; i <= PARTNER_COUNT; i++) {
     const res = http.post(
       `${BASE_URL}/api/v1/partners`,
       JSON.stringify({ name: `K6 Partner ${runId}-${i}`, creditLimit: 10000000 }),
