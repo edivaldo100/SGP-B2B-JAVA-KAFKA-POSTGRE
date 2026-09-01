@@ -52,7 +52,8 @@ export function setup() {
 
   const partners = [];
   const runId = Date.now();
-  for (let i = 1; i <= 5; i++) {
+  const PARTNER_COUNT = 60; // mais parceiros = menos contenção no lock pessimista de PartnerCredit
+  for (let i = 1; i <= PARTNER_COUNT; i++) {
     const res = http.post(
       `${BASE_URL}/api/v1/partners`,
       JSON.stringify({ name: `K6 Partner ${runId}-${i}`, creditLimit: 10000000 }),
