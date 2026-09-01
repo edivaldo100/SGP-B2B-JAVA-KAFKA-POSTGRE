@@ -1,9 +1,11 @@
 services:
 
-  # ─── Banco de dados ──────────────────────────────────────────────────────────
+  # ─── Banco de dados local (desativado nesta branch — DB rodando em 192.168.15.54) ──
   postgres:
     image: postgres:16-alpine
     container_name: orders-postgres
+    profiles:
+      - local-db
     restart: unless-stopped
     environment:
       POSTGRES_DB: orders_db
@@ -56,7 +58,7 @@ services:
     container_name: orders-app
     restart: unless-stopped
     environment:
-      DB_HOST: postgres
+      DB_HOST: 192.168.15.54
       DB_PORT: 5432
       DB_NAME: orders_db
       DB_USERNAME: user
@@ -67,8 +69,6 @@ services:
         soft: 65536
         hard: 65536
     depends_on:
-      postgres:
-        condition: service_healthy
       kafka:
         condition: service_healthy
     healthcheck:
