@@ -9,7 +9,7 @@ services:
       POSTGRES_DB: orders_db
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
-    command: ["postgres", "-c", "max_connections=600", "-c", "shared_buffers=1GB"]
+    command: ["postgres", "-c", "max_connections=1200", "-c", "shared_buffers=1GB"]
     ports:
       - "5432:5432"
     volumes:
@@ -62,6 +62,10 @@ services:
       DB_USERNAME: user
       DB_PASSWORD: password
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,6 +95,10 @@ services:
       - "80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     depends_on:
       app:
         condition: service_healthy
@@ -111,6 +119,32 @@ services:
     command: ["run", "/scripts/load-test.js"]
     depends_on:
       - influxdb
+      - nginx
+
+  # ─── K6 — stress test até o teto da máquina (docker compose run --rm k6_stress) ─
+  k6_stress:
+    image: grafana/k6:0.54.0
+    profiles:
+      - k6
+    volumes:
+      - ./k6:/scripts
+    environment:
+      BASE_URL: http://nginx
+    command: ["run", "/scripts/stress-test.js"]
+    depends_on:
+      - nginx
+
+  # ─── K6 — extreme stress test, além do teto do pool (docker compose run --rm k6_extreme) ─
+  k6_extreme:
+    image: grafana/k6:0.54.0
+    profiles:
+      - k6
+    volumes:
+      - ./k6:/scripts
+    environment:
+      BASE_URL: http://nginx
+    command: ["run", "/scripts/extreme-stress-test.js"]
+    depends_on:
       - nginx
 
   # ─── Observabilidade para testes de carga ────────────────────────────────────

@@ -5,7 +5,6 @@ import com.edivaldo.pedido.domain.exception.OrderNotFoundException;
 import com.edivaldo.pedido.domain.model.CreditTransaction;
 import com.edivaldo.pedido.domain.model.Order;
 import com.edivaldo.pedido.domain.model.OutboxEvent;
-import com.edivaldo.pedido.domain.model.PartnerCredit;
 import com.edivaldo.pedido.domain.port.in.CancelOrderUseCase;
 import com.edivaldo.pedido.domain.port.out.CreditTransactionRepository;
 import com.edivaldo.pedido.domain.port.out.OrderRepository;
@@ -37,13 +36,9 @@ public class CancelOrderService implements CancelOrderUseCase {
         order.cancel();
 
         if (wasDebitable) {
-            partnerCreditRepository.findByPartnerIdForUpdate(order.getPartnerId())
-                    .ifPresent(credit -> {
-                        credit.release(order.getTotalAmount());
-                        partnerCreditRepository.save(credit);
-                        creditTransactionRepository.save(
-                                CreditTransaction.release(order.getPartnerId(), order.getId(), order.getTotalAmount()));
-                    });
+            partnerCreditRepository.release(order.getPartnerId(), order.getTotalAmount());
+            creditTransactionRepository.save(
+                    CreditTransaction.release(order.getPartnerId(), order.getId(), order.getTotalAmount()));
         }
 
         Order cancelled = orderRepository.save(order);

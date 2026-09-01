@@ -96,7 +96,7 @@ class OrderTest {
     }
 
     @Test
-    void isCreditDebitable_deveRetornarTrueApenasParaAprovadoEEmProcessamento() {
+    void isCreditDebitable_deveRetornarTrueParaAprovadoEmProcessamentoEEnviado() {
         Order pendente = buildOrder();
         assertThat(pendente.isCreditDebitable()).isFalse();
 
@@ -109,11 +109,20 @@ class OrderTest {
         emProcessamento.startProcessing();
         assertThat(emProcessamento.isCreditDebitable()).isTrue();
 
+        // ENVIADO ainda e debitavel: o credito so e liberado se o pedido for
+        // cancelado antes de ENTREGUE (ver CancelOrderService/isCreditDebitable).
         Order enviado = buildOrder();
         enviado.approve();
         enviado.startProcessing();
         enviado.ship();
-        assertThat(enviado.isCreditDebitable()).isFalse();
+        assertThat(enviado.isCreditDebitable()).isTrue();
+
+        Order entregue = buildOrder();
+        entregue.approve();
+        entregue.startProcessing();
+        entregue.ship();
+        entregue.deliver();
+        assertThat(entregue.isCreditDebitable()).isFalse();
     }
 
     @ParameterizedTest

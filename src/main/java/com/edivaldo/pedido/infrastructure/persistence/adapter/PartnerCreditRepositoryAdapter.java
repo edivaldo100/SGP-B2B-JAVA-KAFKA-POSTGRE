@@ -7,6 +7,7 @@ import com.edivaldo.pedido.infrastructure.persistence.jpa.PartnerCreditJpaReposi
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -22,8 +23,13 @@ public class PartnerCreditRepositoryAdapter implements PartnerCreditRepository {
     }
 
     @Override
-    public Optional<PartnerCredit> findByPartnerIdForUpdate(UUID partnerId) {
-        return jpaRepository.findByPartnerIdForUpdate(partnerId).map(this::toDomain);
+    public boolean debit(UUID partnerId, BigDecimal amount) {
+        return jpaRepository.debitIfSufficient(partnerId, amount) > 0;
+    }
+
+    @Override
+    public void release(UUID partnerId, BigDecimal amount) {
+        jpaRepository.release(partnerId, amount);
     }
 
     @Override

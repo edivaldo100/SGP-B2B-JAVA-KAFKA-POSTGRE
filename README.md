@@ -350,7 +350,14 @@ docker compose up --build -d
 docker compose --profile k6 run --rm k6_tester
 ```
 
-O setup cria automaticamente 5 parceiros com R$ 10.000.000 de limite cada, executa a rampa de carga (até 100 VUs por 3 minutos) e encerra.
+O setup cria automaticamente 60 parceiros com R$ 10.000.000 de limite cada, executa a rampa de carga (até 600 VUs por 3m30s) e encerra.
+
+Também há dois scripts de stress test (fora do fluxo de regressão normal), pra achar o teto de capacidade da máquina:
+
+```bash
+docker compose --profile k6 run --rm k6_stress     # até 2200 VUs
+docker compose --profile k6 run --rm k6_extreme    # até 4000 VUs
+```
 
 ### Resultados no Grafana
 
@@ -388,7 +395,7 @@ Parceiro / Browser / K6
    ├── Hexagonal Architecture (Ports & Adapters)
    ├── Virtual Threads
    ├── Idempotência (SHA-256 + TTL 30min · reclaimExpired atômico para chaves expiradas)
-   ├── Pessimistic Lock (SELECT FOR UPDATE)
+   ├── Débito de crédito via UPDATE atômico condicional (sem lock de leitura)
    ├── Outbox Pattern (SKIP LOCKED · backoff exponencial)
    ├── SSE pedidos em tempo real  (/api/v1/orders/stream)
    └── SSE eventos Kafka          (/api/v1/orders/kafka/stream)
