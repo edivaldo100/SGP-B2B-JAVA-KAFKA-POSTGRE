@@ -19,10 +19,10 @@ export const options = {
       executor: 'ramping-vus',
       startVUs: 0,
       stages: [
-        { duration: '30s', target: 20  },  // aquecimento
-        { duration: '1m',  target: 50  },  // carga normal
-        { duration: '30s', target: 100 },  // pico
-        { duration: '30s', target: 50  },  // volta ao normal
+        { duration: '30s', target: 100 },  // aquecimento
+        { duration: '1m',  target: 300 },  // carga normal
+        { duration: '1m',  target: 600 },  // pico
+        { duration: '30s', target: 300 },  // volta ao normal
         { duration: '30s', target: 0   },  // resfriamento
       ],
       gracefulRampDown: '10s',
